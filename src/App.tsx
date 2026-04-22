@@ -8,6 +8,7 @@ import NotFound from "./pages/NotFound";
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import VerifyPage from "./pages/VerifyPage";
+import ESSApp from "./components/ess/ESSApp";
 
 const queryClient = new QueryClient();
 
@@ -20,6 +21,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/verify" element={<VerifyPage />} />
+          <Route path="/ess" element={<ESSApp onBackToRegistration={() => window.location.hash = '/'} />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
