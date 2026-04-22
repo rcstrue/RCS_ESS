@@ -120,3 +120,112 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  .step-indicator {
+    @apply flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold transition-all duration-300;
+  }
+  
+  .step-indicator-active {
+    @apply bg-primary text-primary-foreground shadow-md;
+  }
+  
+  .step-indicator-completed {
+    @apply bg-green-500 text-white;
+  }
+  
+  .step-indicator-pending {
+    @apply bg-muted text-muted-foreground;
+  }
+
+  .camera-frame {
+    @apply relative overflow-hidden rounded-xl border-2 border-dashed border-primary/30 bg-muted/50;
+  }
+
+  .camera-overlay {
+    @apply absolute inset-0 flex items-center justify-center bg-foreground/5;
+  }
+
+  .document-preview {
+    @apply rounded-xl overflow-hidden shadow-md bg-card;
+  }
+
+  .verification-badge {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium;
+  }
+
+  .verification-success {
+    @apply bg-green-500/10 text-green-600;
+  }
+
+  .verification-pending {
+    @apply bg-yellow-500/10 text-yellow-600;
+  }
+
+  .verification-error {
+    @apply bg-destructive/10 text-destructive;
+  }
+
+  .form-section {
+    @apply space-y-4 p-6 bg-card rounded-2xl shadow-md;
+  }
+
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/60;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.4s ease-out;
+  }
+
+  .animate-pulse-soft {
+    animation: pulseSoft 2s ease-in-out infinite;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+@keyframes pulseSoft {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
