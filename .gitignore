@@ -25,4 +25,5 @@ dist-ssr
 .env
 
 # Exclude from deployment
+api/
 skills/

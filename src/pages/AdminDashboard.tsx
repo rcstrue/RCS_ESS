@@ -1,163 +1,122 @@
-import { useState } from 'react';
-import { User, Users, LogOut, Menu, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { getAdminSession, adminLogout, verifySession, getAdminRole, AdminUser } from '@/lib/api/auth';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { LogOut, Users, Building2, Briefcase, Loader2, UserCog } from 'lucide-react';
+import { toast } from 'sonner';
 import { EmployeeManagement } from '@/components/admin/EmployeeManagement';
-import { EmployeeProfileView } from '@/components/admin/EmployeeProfileView';
+import { ClientManagement } from '@/components/admin/ClientManagement';
+import { DesignationManagement } from '@/components/admin/DesignationManagement';
+import { UserManagement } from '@/components/admin/UserManagement';
 
-interface AdminUser {
-  id: number;
-  username: string;
-  role: string;
-  name: string;
-}
+export default function AdminDashboard() {
+  const navigate = useNavigate();
+  const [user, setUser] = useState<AdminUser | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-interface AdminDashboardProps {
-  user?: AdminUser | null;
-  onLogout: () => void;
-}
+  useEffect(() => {
+    const checkAuth = async () => {
+      const session = getAdminSession();
+      
+      if (!session) {
+        navigate('/admin/login');
+        return;
+      }
 
-const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }) => {
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+      // Verify session with server
+      const { data, error } = await verifySession();
+      
+      if (error || !data?.valid) {
+        adminLogout();
+        navigate('/admin/login');
+        return;
+      }
 
-  const handleViewEmployee = (employeeId: number) => {
-    setSelectedEmployeeId(employeeId);
-    setSidebarOpen(false);
-  };
+      setUser(session.user);
+      setUserRole(session.user.role);
+      setIsLoading(false);
+    };
 
-  const handleBackToList = () => {
-    setSelectedEmployeeId(null);
-  };
+    checkAuth();
+  }, [navigate]);
 
   const handleLogout = () => {
-    // Clear local storage
-    localStorage.removeItem('adminUser');
-    localStorage.removeItem('token');
-    // Call parent logout
-    if (onLogout) {
-      onLogout();
-    }
-    // Force reload to login
-    window.location.href = '/#/admin';
+    adminLogout();
+    toast.success('Logged out successfully');
+    navigate('/admin/login');
   };
 
-  // If viewing specific employee
-  if (selectedEmployeeId) {
+  if (isLoading) {
     return (
-      <EmployeeProfileView
-        employeeId={selectedEmployeeId}
-        onBack={handleBackToList}
-      />
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
     );
   }
 
-  const displayName = user?.name || user?.username || 'Admin';
-  const displayRole = user?.role || 'manager';
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Mobile Header */}
-      <div className="lg:hidden bg-white shadow-sm border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
-        <button
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="p-2 rounded-lg hover:bg-gray-100"
-        >
-          {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-        </button>
-        <h1 className="text-lg font-semibold text-gray-800">Admin Panel</h1>
-        <button
-          onClick={handleLogout}
-          className="p-2 rounded-lg hover:bg-gray-100 text-red-600"
-        >
-          <LogOut className="w-5 h-5" />
-        </button>
-      </div>
-
-      <div className="flex">
-        {/* Sidebar - Desktop */}
-        <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 bg-white border-r border-gray-200">
-          <div className="flex items-center justify-center h-16 border-b border-gray-200">
-            <h1 className="text-xl font-bold text-gray-800">Admin Panel</h1>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="sticky top-0 z-50 bg-card border-b">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-foreground">Admin Dashboard</h1>
+            <p className="text-sm text-muted-foreground">
+              {user?.email} • {userRole === 'admin' ? 'Administrator' : 'Manager'}
+            </p>
           </div>
-          
-          <nav className="flex-1 p-4 space-y-2">
-            <button
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left bg-blue-50 text-blue-700"
-            >
-              <Users className="w-5 h-5" />
-              <span className="font-medium">Employee Management</span>
-            </button>
-          </nav>
+          <Button variant="outline" onClick={handleLogout}>
+            <LogOut className="w-4 h-4 mr-2" />
+            Logout
+          </Button>
+        </div>
+      </header>
 
-          <div className="p-4 border-t border-gray-200">
-            <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-lg mb-3">
-              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                <User className="w-5 h-5 text-blue-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-800 truncate">{displayName}</p>
-                <p className="text-xs text-gray-500 capitalize">{displayRole}</p>
-              </div>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>Logout</span>
-            </button>
-          </div>
-        </aside>
+      {/* Main Content */}
+      <main className="container mx-auto px-4 py-6">
+        <Tabs defaultValue="employees">
+          <TabsList className="mb-6">
+            <TabsTrigger value="employees" className="gap-2">
+              <Users className="w-4 h-4" />
+              Employees
+            </TabsTrigger>
+            <TabsTrigger value="clients" className="gap-2">
+              <Building2 className="w-4 h-4" />
+              Clients & Units
+            </TabsTrigger>
+            <TabsTrigger value="designations" className="gap-2">
+              <Briefcase className="w-4 h-4" />
+              Designations
+            </TabsTrigger>
+            {userRole === 'admin' && (
+              <TabsTrigger value="users" className="gap-2">
+                <UserCog className="w-4 h-4" />
+                Users
+              </TabsTrigger>
+            )}
+          </TabsList>
 
-        {/* Mobile Sidebar Overlay */}
-        {sidebarOpen && (
-          <div className="lg:hidden fixed inset-0 z-40">
-            <div 
-              className="absolute inset-0 bg-black/50"
-              onClick={() => setSidebarOpen(false)}
-            />
-            <aside className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-xl">
-              <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
-                <h1 className="text-lg font-bold text-gray-800">Menu</h1>
-                <button
-                  onClick={() => setSidebarOpen(false)}
-                  className="p-2 rounded-lg hover:bg-gray-100"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              
-              <nav className="p-4 space-y-2">
-                <button
-                  onClick={() => setSidebarOpen(false)}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left bg-blue-50 text-blue-700"
-                >
-                  <Users className="w-5 h-5" />
-                  <span className="font-medium">Employee Management</span>
-                </button>
-              </nav>
-              
-              <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span>Logout</span>
-                </button>
-              </div>
-            </aside>
-          </div>
-        )}
+          <TabsContent value="employees">
+            <EmployeeManagement userRole={userRole!} />
+          </TabsContent>
 
-        {/* Main Content */}
-        <main className="flex-1 lg:ml-64">
-          <div className="p-4 lg:p-6">
-            <EmployeeManagement onViewEmployee={handleViewEmployee} />
-          </div>
-        </main>
-      </div>
+          <TabsContent value="clients">
+            <ClientManagement />
+          </TabsContent>
+
+          <TabsContent value="designations">
+            <DesignationManagement />
+          </TabsContent>
+
+          {userRole === 'admin' && (
+            <TabsContent value="users">
+              <UserManagement />
+            </TabsContent>
+          )}
+        </Tabs>
+      </main>
     </div>
   );
-};
-
-export default AdminDashboard;
+}

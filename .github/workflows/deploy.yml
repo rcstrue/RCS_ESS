@@ -1,34 +1,33 @@
-name: Deploy to Production
+name: Build & Deploy (Static via FTP)
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: '20'
+          bun-version: latest
 
       - name: Install dependencies
-        run: npm install
+        run: bun install
 
-      - name: Build project
-        run: npm run build
+      - name: Build static site
+        run: bun run build
 
       - name: Install lftp
         run: sudo apt-get update && sudo apt-get install -y lftp
 
-      - name: Deploy via FTP
+      - name: Deploy via FTP (upload and overwrite, preserve other files)
         run: |
           lftp -c "
             set ftp:ssl-allow no;
@@ -36,8 +35,9 @@ jobs:
             set net:timeout 30;
             set net:max-retries 3;
             open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
+            cd public_html;
             lcd dist;
             mirror -R --no-symlinks --parallel=4 --no-perms --overwrite;
             quit
           "
-          echo "Deploy completed - files uploaded successfully"
+          echo "Deploy completed - files uploaded and overwritten, other server files preserved"

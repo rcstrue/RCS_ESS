@@ -1,345 +1,425 @@
-import { useState, useEffect } from 'react';
-import { Search, User, Phone, MapPin, Building, Calendar, Eye, X, ChevronDown, Loader2, AlertCircle } from 'lucide-react';
-
-interface Employee {
-  id: number;
-  name: string;
-  phone: string;
-  email: string;
-  client_name: string;
-  unit_name: string;
-  designation: string;
-  status: string;
-  created_at: string;
-}
+import { useState, useEffect, useCallback } from 'react';
+import { getEmployees, getEmployeeById, approveEmployee, rejectEmployee, updateEmployeeRole, Employee } from '@/lib/api/employees';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { toast } from 'sonner';
+import { Check, X, Eye, Loader2, UserCog, Search, User, Filter } from 'lucide-react';
+import { EmployeeDetailDialog } from './EmployeeDetailDialog';
+import { getFileUrl } from '@/lib/api/config';
 
 interface EmployeeManagementProps {
-  onViewEmployee: (employeeId: number) => void;
+  userRole: string;
 }
 
-const API_BASE = 'https://join.rcsfacility.com/api';
-
-export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({ onViewEmployee }) => {
+export function EmployeeManagement({ userRole }: EmployeeManagementProps) {
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [clientFilter, setClientFilter] = useState('');
-  const [unitFilter, setUnitFilter] = useState('');
-  const [clients, setClients] = useState<{ id: number; name: string }[]>([]);
-  const [units, setUnits] = useState<{ id: number; name: string; client_id: number }[]>([]);
-  const [showClientDropdown, setShowClientDropdown] = useState(false);
-  const [showUnitDropdown, setShowUnitDropdown] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
+  const [newRole, setNewRole] = useState<string>('employee');
+  const [isUpdating, setIsUpdating] = useState(false);
+  
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [clientFilter, setClientFilter] = useState<string>('all');
+  const [clients, setClients] = useState<string[]>([]);
 
-  useEffect(() => {
-    fetchData();
+  const fetchEmployees = useCallback(async () => {
+    setIsLoading(true);
+    const { data, error } = await getEmployees(1, 100);
+
+    if (error) {
+      toast.error('Failed to fetch employees');
+      console.error(error);
+    } else {
+      const employeeList = data?.data || [];
+      setEmployees(employeeList);
+      // Extract unique clients
+      const uniqueClients = [...new Set(employeeList
+        .map(e => e.client_name)
+        .filter(Boolean) as string[])];
+      setClients(uniqueClients);
+    }
+    setIsLoading(false);
   }, []);
 
-  const fetchData = async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      // Fetch all data in parallel
-      const [empRes, clientRes, unitRes] = await Promise.all([
-        fetch(`${API_BASE}/employees.php`),
-        fetch(`${API_BASE}/clients.php`),
-        fetch(`${API_BASE}/units.php`)
-      ]);
+  const filterEmployees = useCallback(() => {
+    let filtered = [...employees];
 
-      const empData = await empRes.json();
-      const clientData = await clientRes.json();
-      const unitData = await unitRes.json();
-
-      console.log('Employees:', empData);
-      console.log('Clients:', clientData);
-      console.log('Units:', unitData);
-
-      if (empData.success || empData.data) {
-        setEmployees(empData.data || []);
-      }
-      
-      if (clientData.success || clientData.data) {
-        setClients(clientData.data || []);
-      }
-      
-      if (unitData.success || unitData.data) {
-        setUnits(unitData.data || []);
-      }
-    } catch (err) {
-      console.error('Error fetching data:', err);
-      setError('Failed to load data. Please try again.');
-    } finally {
-      setLoading(false);
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(e =>
+        e.full_name?.toLowerCase().includes(query) ||
+        e.mobile_number.includes(query) ||
+        e.email?.toLowerCase().includes(query) ||
+        e.aadhaar_number?.includes(query) ||
+        String(e.employee_code).includes(query)
+      );
     }
+
+    // Status filter
+    if (statusFilter !== 'all') {
+      if (statusFilter === 'pending_approval') {
+        filtered = filtered.filter(e => e.manager_edits_pending);
+      } else {
+        filtered = filtered.filter(e => e.status === statusFilter);
+      }
+    }
+
+    // Client filter
+    if (clientFilter !== 'all') {
+      filtered = filtered.filter(e => e.client_name === clientFilter);
+    }
+
+    setFilteredEmployees(filtered);
+  }, [employees, searchQuery, statusFilter, clientFilter]);
+
+  useEffect(() => {
+    fetchEmployees();
+  }, [fetchEmployees]);
+
+  useEffect(() => {
+    filterEmployees();
+  }, [filterEmployees]);
+
+  const handleApprove = async (employeeId: number) => {
+    setIsUpdating(true);
+    const { error } = await approveEmployee(employeeId, 'admin');
+
+    if (error) {
+      toast.error('Failed to approve employee');
+    } else {
+      toast.success('Employee approved successfully');
+      fetchEmployees();
+    }
+    setIsUpdating(false);
   };
 
-  // Get unique clients from employees if API doesn't work
-  const uniqueClients = clients.length > 0 ? clients : 
-    Array.from(new Set(employees.map(e => e.client_name).filter(Boolean))).map((name, i) => ({ id: i + 1, name }));
+  const handleReject = async (employeeId: number) => {
+    setIsUpdating(true);
+    const { error } = await rejectEmployee(employeeId);
 
-  // Get unique units from employees if API doesn't work
-  const uniqueUnits = units.length > 0 ? units :
-    Array.from(new Set(employees.map(e => e.unit_name).filter(Boolean))).map((name, i) => ({ id: i + 1, name, client_id: 0 }));
+    if (error) {
+      toast.error('Failed to reject employee');
+    } else {
+      toast.success('Employee rejected');
+      fetchEmployees();
+    }
+    setIsUpdating(false);
+  };
 
-  // Filter units based on selected client
-  const filteredUnits = clientFilter && units.length > 0
-    ? units.filter(u => u.client_id === parseInt(clientFilter))
-    : uniqueUnits;
-
-  const filteredEmployees = employees.filter(emp => {
-    const matchesSearch = 
-      emp.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.phone?.includes(searchTerm) ||
-      emp.email?.toLowerCase().includes(searchTerm.toLowerCase());
+  const handleRoleChange = async () => {
+    if (!selectedEmployee) return;
     
-    const matchesClient = !clientFilter || emp.client_name === uniqueClients.find(c => c.id === parseInt(clientFilter))?.name;
-    const matchesUnit = !unitFilter || emp.unit_name === uniqueUnits.find(u => u.id === parseInt(unitFilter))?.name;
-    
-    return matchesSearch && matchesClient && matchesUnit;
-  });
+    setIsUpdating(true);
+    const { error } = await updateEmployeeRole(selectedEmployee.id, newRole as 'admin' | 'manager' | 'employee');
 
-  const getStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'active':
-        return 'bg-green-100 text-green-800';
-      case 'inactive':
-        return 'bg-red-100 text-red-800';
+    if (error) {
+      toast.error('Failed to update role');
+    } else {
+      toast.success(`Role updated to ${newRole}`);
+      fetchEmployees();
+      setIsRoleDialogOpen(false);
+    }
+    setIsUpdating(false);
+  };
+
+  const openRoleDialog = (employee: Employee) => {
+    setSelectedEmployee(employee);
+    setNewRole(employee.employee_role || 'employee');
+    setIsRoleDialogOpen(true);
+  };
+
+  const openDetailDialog = async (employee: Employee) => {
+    // Fetch full employee details
+    const { data: fullEmployee } = await getEmployeeById(employee.id);
+    if (fullEmployee) {
+      setSelectedEmployee(fullEmployee);
+    } else {
+      setSelectedEmployee(employee);
+    }
+    setIsDetailDialogOpen(true);
+  };
+
+  const getStatusBadge = (status: string | null, managerEdits: boolean | null) => {
+    if (managerEdits) {
+      return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">Pending Admin Approval</Badge>;
+    }
+    switch (status) {
+      case 'approved':
+        return <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">Approved</Badge>;
+      case 'rejected':
+        return <Badge variant="destructive">Rejected</Badge>;
       default:
-        return 'bg-gray-100 text-gray-800';
+        return <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/30">Pending HR</Badge>;
     }
   };
 
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return '-';
-    try {
-      return new Date(dateStr).toLocaleDateString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric'
-      });
-    } catch {
-      return dateStr;
+  const getRoleBadge = (role: string | null) => {
+    switch (role) {
+      case 'admin':
+        return <Badge className="bg-purple-500">Admin</Badge>;
+      case 'manager':
+        return <Badge className="bg-blue-500">Manager</Badge>;
+      default:
+        return <Badge variant="secondary">Employee</Badge>;
     }
   };
 
-  const selectedClientName = clientFilter ? uniqueClients.find(c => c.id === parseInt(clientFilter))?.name : '';
-  const selectedUnitName = unitFilter ? uniqueUnits.find(u => u.id === parseInt(unitFilter))?.name : '';
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-800">Employee Management</h2>
-          <p className="text-sm text-gray-500 mt-1">View employee records</p>
-        </div>
-        <div className="text-sm text-gray-500">
-          Total: {filteredEmployees.length} employees
-        </div>
-      </div>
-
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <span className="text-red-700">{error}</span>
-          <button 
-            onClick={fetchData}
-            className="ml-auto px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
-          >
-            Retry
-          </button>
-        </div>
-      )}
-
-      {/* Search and Filters */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-4">
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search by name, phone, or email..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-
-        {/* Filters Row */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          {/* Client Filter */}
-          <div className="relative flex-1">
-            <button
-              onClick={() => {
-                setShowClientDropdown(!showClientDropdown);
-                setShowUnitDropdown(false);
-              }}
-              className="w-full flex items-center justify-between px-4 py-3 border border-gray-300 rounded-lg bg-white hover:bg-gray-50"
-            >
-              <span className={clientFilter ? 'text-gray-800' : 'text-gray-500'}>
-                {clientFilter ? selectedClientName : 'All Clients'}
-              </span>
-              <ChevronDown className="w-4 h-4 text-gray-400" />
-            </button>
-            {showClientDropdown && (
-              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                <button
-                  onClick={() => {
-                    setClientFilter('');
-                    setUnitFilter('');
-                    setShowClientDropdown(false);
-                  }}
-                  className="w-full px-4 py-2 text-left hover:bg-gray-50 text-gray-600"
-                >
-                  All Clients
-                </button>
-                {uniqueClients.map(client => (
-                  <button
-                    key={client.id}
-                    onClick={() => {
-                      setClientFilter(client.id.toString());
-                      setUnitFilter('');
-                      setShowClientDropdown(false);
-                    }}
-                    className="w-full px-4 py-2 text-left hover:bg-gray-50"
-                  >
-                    {client.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Unit Filter */}
-          <div className="relative flex-1">
-            <button
-              onClick={() => {
-                setShowUnitDropdown(!showUnitDropdown);
-                setShowClientDropdown(false);
-              }}
-              className="w-full flex items-center justify-between px-4 py-3 border border-gray-300 rounded-lg bg-white hover:bg-gray-50"
-            >
-              <span className={unitFilter ? 'text-gray-800' : 'text-gray-500'}>
-                {unitFilter ? selectedUnitName : 'All Units'}
-              </span>
-              <ChevronDown className="w-4 h-4 text-gray-400" />
-            </button>
-            {showUnitDropdown && (
-              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                <button
-                  onClick={() => {
-                    setUnitFilter('');
-                    setShowUnitDropdown(false);
-                  }}
-                  className="w-full px-4 py-2 text-left hover:bg-gray-50 text-gray-600"
-                >
-                  All Units
-                </button>
-                {filteredUnits.map(unit => (
-                  <button
-                    key={unit.id}
-                    onClick={() => {
-                      setUnitFilter(unit.id.toString());
-                      setShowUnitDropdown(false);
-                    }}
-                    className="w-full px-4 py-2 text-left hover:bg-gray-50"
-                  >
-                    {unit.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Clear Filters */}
-          {(clientFilter || unitFilter || searchTerm) && (
-            <button
-              onClick={() => {
-                setClientFilter('');
-                setUnitFilter('');
-                setSearchTerm('');
-              }}
-              className="flex items-center gap-2 px-4 py-3 text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              <X className="w-4 h-4" />
-              <span>Clear</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Employee List */}
-      {filteredEmployees.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
-          <User className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-800 mb-2">No employees found</h3>
-          <p className="text-gray-500">Try adjusting your search or filters</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filteredEmployees.map(employee => (
-            <div
-              key={employee.id}
-              className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  {/* Employee Name & Status */}
-                  <div className="flex items-center gap-2 mb-2">
-                    <h3 className="text-lg font-semibold text-gray-800 truncate">
-                      {employee.name || 'N/A'}
-                    </h3>
-                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getStatusColor(employee.status)}`}>
-                      {employee.status || 'Unknown'}
-                    </span>
-                  </div>
-
-                  {/* Info Grid - Mobile Friendly */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Phone className="w-4 h-4 text-gray-400" />
-                      <span>{employee.phone || 'N/A'}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Building className="w-4 h-4 text-gray-400" />
-                      <span>{employee.client_name || 'N/A'}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <MapPin className="w-4 h-4 text-gray-400" />
-                      <span>{employee.unit_name || 'N/A'}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Calendar className="w-4 h-4 text-gray-400" />
-                      <span>Joined: {formatDate(employee.created_at)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* View Button */}
-                <button
-                  onClick={() => onViewEmployee(employee.id)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shrink-0"
-                >
-                  <Eye className="w-4 h-4" />
-                  <span className="hidden sm:inline">View</span>
-                </button>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UserCog className="w-5 h-5" />
+            Employee Management
+            <Badge variant="secondary" className="ml-2">{filteredEmployees.length} employees</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {/* Filters */}
+          <div className="flex flex-wrap gap-4 mb-6">
+            <div className="flex-1 min-w-[200px]">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name, mobile, email, code..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
               </div>
             </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[180px]">
+                <Filter className="w-4 h-4 mr-2" />
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="pending_hr_verification">Pending HR</SelectItem>
+                <SelectItem value="pending_approval">Pending Admin</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={clientFilter} onValueChange={setClientFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Client" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Clients</SelectItem>
+                {clients.map(client => (
+                  <SelectItem key={client} value={client}>{client}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-export default EmployeeManagement;
+          {/* Table */}
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Client / Unit</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredEmployees.map((employee) => (
+                  <TableRow key={employee.id} className="cursor-pointer hover:bg-muted/50">
+                    <TableCell onClick={() => openDetailDialog(employee)}>
+                      <div className="flex items-center gap-3">
+                        <Avatar className="w-10 h-10">
+                          <AvatarImage src={getFileUrl(employee.profile_pic_cropped_url || employee.profile_pic_url) || undefined} />
+                          <AvatarFallback>
+                            <User className="w-5 h-5" />
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">{employee.full_name || 'N/A'}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Code: {employee.employee_code}
+                          </p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell onClick={() => openDetailDialog(employee)}>
+                      <div>
+                        <p>{employee.mobile_number}</p>
+                        <p className="text-sm text-muted-foreground">{employee.email || 'No email'}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell onClick={() => openDetailDialog(employee)}>
+                      {employee.client_name && employee.unit_name ? (
+                        <div>
+                          <p className="font-medium">{employee.client_name}</p>
+                          <p className="text-sm text-muted-foreground">{employee.unit_name}</p>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">Not assigned</span>
+                      )}
+                    </TableCell>
+                    <TableCell>{getRoleBadge(employee.employee_role)}</TableCell>
+                    <TableCell>
+                      {getStatusBadge(employee.status, employee.manager_edits_pending)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openDetailDialog(employee)}
+                          title="View Details"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        {userRole === 'admin' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openRoleDialog(employee)}
+                            title="Change Role"
+                          >
+                            <UserCog className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {(employee.status === 'pending_hr_verification' || employee.manager_edits_pending) && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleApprove(employee.id)}
+                              disabled={isUpdating}
+                              className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                              title="Approve"
+                            >
+                              <Check className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleReject(employee.id)}
+                              disabled={isUpdating}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              title="Reject"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {filteredEmployees.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                      <User className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>No employees found</p>
+                      {(searchQuery || statusFilter !== 'all' || clientFilter !== 'all') && (
+                        <Button
+                          variant="link"
+                          onClick={() => {
+                            setSearchQuery('');
+                            setStatusFilter('all');
+                            setClientFilter('all');
+                          }}
+                        >
+                          Clear filters
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Role Change Dialog */}
+      <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Employee Role</DialogTitle>
+            <DialogDescription>
+              Update role for {selectedEmployee?.full_name || selectedEmployee?.mobile_number}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Select value={newRole} onValueChange={setNewRole}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="employee">Employee</SelectItem>
+                <SelectItem value="manager">Manager</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsRoleDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleRoleChange} disabled={isUpdating}>
+              {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Employee Detail Dialog */}
+      <EmployeeDetailDialog
+        employee={selectedEmployee}
+        isOpen={isDetailDialogOpen}
+        onClose={() => setIsDetailDialogOpen(false)}
+        onSave={fetchEmployees}
+        userRole={userRole}
+      />
+    </>
+  );
+}
