@@ -182,11 +182,11 @@ export default function HelpdeskPage({ employeeId, employeeName }: HelpdeskPageP
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '';
     const d = new Date(dateStr);
-    return d.toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
+    if (isNaN(d.getTime())) return dateStr;
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
   };
 
   // ── Render ──

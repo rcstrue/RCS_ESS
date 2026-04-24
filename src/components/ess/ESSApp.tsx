@@ -127,12 +127,13 @@ function getInitials(name: string): string {
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-IN', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
 }
 
 function todayDateString(): string {
@@ -1233,8 +1234,8 @@ export default function ESSApp({ onBackToRegistration }: ESSAppProps) {
               <p className="text-sm text-gray-500 mt-0.5">
                 {new Date().toLocaleDateString('en-IN', {
                   weekday: 'long',
-                  month: 'long',
                   day: 'numeric',
+                  month: 'long',
                   year: 'numeric',
                 })}
               </p>
