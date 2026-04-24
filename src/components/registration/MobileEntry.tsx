@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Phone, ArrowRight, Loader2, Calendar, Camera } from 'lucide-react';
+import { Phone, ArrowRight, Loader2, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SplitDateInput } from '@/components/ui/date-input';
 import { ProfilePhotoCapture } from '@/components/registration/ProfilePhotoCapture';
 import { uploadBase64Image, getFileUrl } from '@/lib/api/config';
 import { toast } from 'sonner';
@@ -288,19 +289,15 @@ export function MobileEntry({ onMobileSubmit, onLoginSubmit, checkMobileExists }
                   <p className="text-lg font-medium">+91 {mobileNumber}</p>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="dob" className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-muted-foreground" />
-                    Date of Birth (for verification)
-                  </Label>
-                  <Input
-                    id="dob"
-                    type="date"
-                    value={dateOfBirth}
-                    onChange={(e) => setDateOfBirth(e.target.value)}
-                    className="h-12"
-                  />
-                </div>
+                <SplitDateInput
+                  label="Date of Birth (for verification)"
+                  value={dateOfBirth}
+                  onChange={(value) => setDateOfBirth(value)}
+                  required
+                  error={error && !dateOfBirth ? 'Please enter your date of birth' : undefined}
+                  maxYear={new Date().getFullYear() - 14}
+                  minYear={1940}
+                />
 
                 {error && (
                   <p className="text-sm text-destructive text-center">{error}</p>
