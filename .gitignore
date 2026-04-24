@@ -24,6 +24,8 @@ dist-ssr
 *.sw?
 .env
 
-# Exclude from deployment
-api/
+# Exclude from deployment (PHP API config with real DB creds)
+api/ess/config.php
+api/ess/db_credentials.php
+api/ess/.htaccess
 skills/
