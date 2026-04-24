@@ -9,6 +9,7 @@
  * - For scope=city: filter employees by the requesting employee's unit city
  */
 
+require_once __DIR__ . '/cors.php';
 @require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/helpers.php';
 

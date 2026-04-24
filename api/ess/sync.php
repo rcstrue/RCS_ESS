@@ -8,6 +8,7 @@
  */
 
 // Load config (falls back to example.config.php)
+require_once __DIR__ . '/cors.php';
 @require_once __DIR__ . '/config.php';
 if (!function_exists('getDbConnection')) require_once __DIR__ . '/example.config.php';
 

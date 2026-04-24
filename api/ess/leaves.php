@@ -11,6 +11,7 @@
  * DB Schema: ess_leave_balances.year is CHAR(4) (string), NOT int!
  */
 
+require_once __DIR__ . '/cors.php';
 @require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/helpers.php';
 

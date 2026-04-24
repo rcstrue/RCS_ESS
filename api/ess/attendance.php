@@ -8,6 +8,7 @@
  * DB Schema: ess_attendance.employee_id is VARCHAR(50), NOT int!
  */
 
+require_once __DIR__ . '/cors.php';
 @require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/helpers.php';
 

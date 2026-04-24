@@ -11,6 +11,7 @@
  * - employees table: has state, district, NO city column
  */
 
+require_once __DIR__ . '/cors.php';
 @require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/helpers.php';
 
