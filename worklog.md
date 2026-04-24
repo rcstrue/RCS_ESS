@@ -37,3 +37,33 @@ Stage Summary:
 - All 6 reported bugs fixed: announcement scope, badge placement, PIN change, expenses NaN, attendance dates/hours, directory dropdown
 - Two commits pushed: f6c0269 (white screen fix), 3172e25 (all feature fixes)
 - Build verified: 1790 modules, no errors
+---
+Task ID: 8
+Agent: Main Agent
+Task: Recreate all PHP API files after user uploaded old files (caused 404 on login)
+
+Work Log:
+- User uploaded old files, reverting all PHP API files on server → 404 on /api/ess/login
+- Verified frontend code is intact (ESSApp.tsx, AnnouncementsPage.tsx - Shield already imported)
+- Created 10 PHP API files in `api/ess/`:
+  1. login.php - POST login (mobile+PIN), GET session check
+  2. pin.php - POST change PIN (3-step: verify current → new → confirm)
+  3. attendance.php - GET history, POST check-in, PUT check-out
+  4. leaves.php - GET balance/requests, POST apply, PUT approve/reject
+  5. tasks.php - GET/POST/PUT task CRUD
+  6. expenses.php - GET/POST/PUT expense CRUD with summary
+  7. helpdesk.php - GET/POST helpdesk tickets
+  8. announcements.php - GET/POST announcements with scope filtering
+  9. employees.php - GET employee directory with search/filters
+  10. filters.php - GET clients, units, profile data (multi-view)
+- All files use employee_id as VARCHAR(50) with 's' binding (no intval)
+- All files validate X-API-KEY header
+- All files include ../config.php for DB connection
+- Vite build successful: 1790 modules, no errors
+- Output: dist/index.html, dist/assets/index-BgHulcc9.css, dist/assets/index-CFFx_qe1.js
+
+Stage Summary:
+- All 10 PHP API files recreated locally at api/ess/
+- Frontend build successful (Vite)
+- User needs to upload api/ess/*.php to server AND dist/ files to fix the live app
+- config.php on server must already exist with real DB credentials (DO NOT overwrite)
