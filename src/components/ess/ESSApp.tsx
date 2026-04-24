@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
-import { essLogin, fetchProfile, fetchLeaveBalance, fetchLeaves, fetchExpenses, fetchTasks } from '@/lib/ess-api';
+import { essLogin, fetchProfile, fetchLeaveBalance, fetchLeaves, fetchExpenses, fetchTasks, changePin } from '@/lib/ess-api';
 import type { Employee, EmployeeRole, ESSSession, LeaveBalance, AttendanceRecord } from '@/lib/ess-types';
 import { getFileUrl } from '@/lib/api/config';
 
@@ -19,6 +19,7 @@ import DirectoryPage from './DirectoryPage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -53,6 +54,7 @@ import {
   Leaf,
   CheckCircle2,
   ListTodo,
+  KeyRound,
 } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════
@@ -663,9 +665,11 @@ function ProfileView({
 function SettingsView({
   employee,
   onLogout,
+  onShowPinDialog,
 }: {
   employee: Employee;
   onLogout: () => void;
+  onShowPinDialog: () => void;
 }) {
   const [darkMode, setDarkMode] = useState(false);
 
@@ -702,6 +706,26 @@ function SettingsView({
               </div>
             </div>
             <Switch checked={darkMode} onCheckedChange={toggleDarkMode} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Change PIN */}
+      <Card className="border-0 shadow-sm">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center w-9 h-9 rounded-full bg-emerald-50">
+                <KeyRound className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-800">Change PIN</p>
+                <p className="text-xs text-gray-400">Update your login PIN</p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={onShowPinDialog}>
+              Change
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -792,6 +816,205 @@ function PageHeader({
 }
 
 // ══════════════════════════════════════════════════════════════
+// PinInputBoxes Helper
+// ══════════════════════════════════════════════════════════════
+
+function PinInputBoxes({
+  step, currentPin, newPin, confirmPin, setCurrentPin, setNewPin, setConfirmPin,
+}: {
+  step: 'current' | 'new' | 'confirm';
+  currentPin: string;
+  newPin: string;
+  confirmPin: string;
+  setCurrentPin: (v: string) => void;
+  setNewPin: (v: string) => void;
+  setConfirmPin: (v: string) => void;
+}) {
+  const pin = step === 'current' ? currentPin : step === 'new' ? newPin : confirmPin;
+  const setPin = step === 'current' ? setCurrentPin : step === 'new' ? setNewPin : setConfirmPin;
+
+  const handleChange = (index: number, value: string) => {
+    if (value.length > 1) {
+      const digits = value.replace(/\D/g, '').slice(0, 4 - index);
+      setPin(pin.slice(0, index) + digits);
+      return;
+    }
+    if (!/^\d*$/.test(value)) return;
+    setPin(pin.slice(0, index) + value + pin.slice(index + 1));
+  };
+
+  return (
+    <>
+      {[0, 1, 2, 3].map((i) => (
+        <input
+          key={`${step}-${i}`}
+          type="tel"
+          inputMode="numeric"
+          maxLength={4}
+          value={pin[i] || ''}
+          onChange={(e) => handleChange(i, e.target.value)}
+          onFocus={(e) => e.target.select()}
+          className="w-14 h-14 text-center text-2xl font-bold rounded-xl border-2 border-emerald-500 bg-emerald-50 text-emerald-700 focus:outline-none"
+        />
+      ))}
+    </>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// ChangePinDialog Component
+// ══════════════════════════════════════════════════════════════
+
+function ChangePinDialog({
+  open,
+  onOpenChange,
+  employeeId,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  employeeId: number;
+}) {
+  const [step, setStep] = useState<'current' | 'new' | 'confirm'>('current');
+  const [currentPin, setCurrentPin] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const resetAndClose = () => {
+    setStep('current');
+    setCurrentPin('');
+    setNewPin('');
+    setConfirmPin('');
+    setLoading(false);
+    onOpenChange(false);
+  };
+
+  const handleSubmitCurrentPin = async () => {
+    if (currentPin.length !== 4) {
+      toast.error('Please enter your current 4-digit PIN');
+      return;
+    }
+    // Move to new PIN step
+    setStep('new');
+  };
+
+  const handleSubmitNewPin = () => {
+    if (newPin.length !== 4) {
+      toast.error('Please enter a 4-digit new PIN');
+      return;
+    }
+    setStep('confirm');
+  };
+
+  const handleSubmitConfirmPin = async () => {
+    if (confirmPin !== newPin) {
+      toast.error('PINs do not match. Please try again.');
+      setConfirmPin('');
+      setStep('new');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await changePin(employeeId, currentPin, newPin);
+      if (error) {
+        toast.error(error);
+        return;
+      }
+      toast.success('PIN changed successfully!');
+      resetAndClose();
+    } catch {
+      toast.error('Failed to change PIN. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBack = () => {
+    if (step === 'confirm') { setStep('new'); setConfirmPin(''); }
+    else if (step === 'new') { setStep('current'); setNewPin(''); }
+  };
+
+  const stepTitles = {
+    current: 'Enter Current PIN',
+    new: 'Enter New PIN',
+    confirm: 'Confirm New PIN',
+  };
+  const stepIcons = { current: Shield, new: KeyRound, confirm: CheckCircle2 };
+  const StepIcon = stepIcons[step];
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) resetAndClose(); }}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <StepIcon className="w-5 h-5 text-emerald-600" />
+            {stepTitles[step]}
+          </DialogTitle>
+          <DialogDescription>
+            {step === 'current' && 'Verify your current PIN first'}
+            {step === 'new' && 'Choose a new 4-digit PIN'}
+            {step === 'confirm' && 'Re-enter your new PIN to confirm'}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex items-center justify-center gap-3 py-4">
+          <PinInputBoxes
+            step={step}
+            currentPin={currentPin}
+            newPin={newPin}
+            confirmPin={confirmPin}
+            setCurrentPin={setCurrentPin}
+            setNewPin={setNewPin}
+            setConfirmPin={setConfirmPin}
+          />
+        </div>
+
+        {/* Step indicators */}
+        <div className="flex items-center justify-center gap-2 mb-2">
+          {(['current', 'new', 'confirm'] as const).map((s) => (
+            <div
+              key={s}
+              className={`h-1.5 rounded-full transition-all ${
+                s === step ? 'w-8 bg-emerald-500' :
+                ['current', 'new', 'confirm'].indexOf(s) < ['current', 'new', 'confirm'].indexOf(step)
+                  ? 'w-8 bg-emerald-300'
+                  : 'w-8 bg-gray-200'
+              }`}
+            />
+          ))}
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          {step !== 'current' && (
+            <Button variant="outline" onClick={handleBack} disabled={loading}>
+              Back
+            </Button>
+          )}
+          <Button
+            onClick={
+              step === 'current' ? handleSubmitCurrentPin :
+              step === 'new' ? handleSubmitNewPin :
+              handleSubmitConfirmPin
+            }
+            disabled={loading}
+            className="gap-2"
+          >
+            {loading ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Verifying...</>
+            ) : step === 'confirm' ? (
+              'Change PIN'
+            ) : (
+              'Next'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
 // Main ESSApp Component
 // ══════════════════════════════════════════════════════════════
 
@@ -803,6 +1026,8 @@ export default function ESSApp({ onBackToRegistration }: ESSAppProps) {
   // ── Navigation State ──
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [announcementCount, setAnnouncementCount] = useState(0);
+  const [showPinDialog, setShowPinDialog] = useState(false);
 
   // ── Dashboard Data ──
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
@@ -976,6 +1201,19 @@ export default function ESSApp({ onBackToRegistration }: ESSAppProps) {
             <p className="text-xs text-gray-500 truncate">{emp.designation || emp.employee_role || 'Employee'}</p>
           </div>
 
+          {/* Announcement Bell */}
+          <button
+            onClick={() => { setAnnouncementCount(0); navigate('announcements'); }}
+            className="relative flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            <Bell className="w-4.5 h-4.5 text-gray-600" />
+            {announcementCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center w-4.5 h-4.5 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+                {announcementCount > 9 ? '9+' : announcementCount}
+              </span>
+            )}
+          </button>
+
           {/* Company Logo */}
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-600">
             <Building2 className="w-4 h-4 text-white" />
@@ -1102,9 +1340,17 @@ export default function ESSApp({ onBackToRegistration }: ESSAppProps) {
           <SettingsView
             employee={emp}
             onLogout={clearSession}
+            onShowPinDialog={() => setShowPinDialog(true)}
           />
         )}
       </main>
+
+      {/* ── Change PIN Dialog ── */}
+      <ChangePinDialog
+        open={showPinDialog}
+        onOpenChange={setShowPinDialog}
+        employeeId={emp.id}
+      />
 
       {/* ── Bottom Navigation ── */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t safe-area-bottom">

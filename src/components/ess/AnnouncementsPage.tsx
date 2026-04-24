@@ -9,6 +9,7 @@ import {
   Building2,
   MapPin,
   Inbox,
+  Shield,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -66,20 +67,20 @@ const PRIORITY_BADGE: Record<AnnouncementPriority, string> = {
 
 const SCOPE_BADGE: Record<AnnouncementScope, string> = {
   all: 'bg-blue-100 text-blue-700 border-blue-200',
-  unit: 'bg-purple-100 text-purple-700 border-purple-200',
-  city: 'bg-teal-100 text-teal-700 border-teal-200',
+  managers: 'bg-purple-100 text-purple-700 border-purple-200',
+  admin: 'bg-amber-100 text-amber-700 border-amber-200',
 };
 
 const SCOPE_LABEL: Record<AnnouncementScope, string> = {
-  all: 'All Employees',
-  unit: 'Unit Only',
-  city: 'City Only',
+  all: 'All',
+  managers: 'Managers',
+  admin: 'Admin',
 };
 
 const SCOPE_ICON: Record<AnnouncementScope, typeof Users> = {
   all: Users,
-  unit: Building2,
-  city: MapPin,
+  managers: Shield,
+  admin: Building2,
 };
 
 const PRIORITY_OPTIONS = [
@@ -90,9 +91,9 @@ const PRIORITY_OPTIONS = [
 ];
 
 const SCOPE_OPTIONS = [
-  { value: 'all', label: 'All Employees' },
-  { value: 'unit', label: 'Unit Only' },
-  { value: 'city', label: 'City Only' },
+  { value: 'all', label: 'All (Unit Employees)' },
+  { value: 'managers', label: 'Managers Only' },
+  { value: 'admin', label: 'Admin Only' },
 ];
 
 // ── Component ──────────────────────────────────────────
@@ -118,8 +119,10 @@ export default function AnnouncementsPage({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchAnnouncements();
-      setAnnouncements(Array.isArray(res) ? res : []);
+      const { data } = await fetchAnnouncements();
+      const paginated = data as Record<string, unknown> | undefined;
+      const items = Array.isArray(data) ? data : (Array.isArray(paginated?.items) ? paginated.items : []);
+      setAnnouncements(items);
     } catch (err) {
       console.error('Failed to fetch announcements:', err);
       setError('Failed to load announcements. Please try again.');

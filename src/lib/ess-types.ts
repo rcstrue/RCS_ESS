@@ -164,7 +164,7 @@ export interface Announcement {
   title: string;
   content: string;
   priority: 'urgent' | 'high' | 'normal' | 'low';
-  target_scope: 'all' | 'unit' | 'city';
+  target_scope: 'all' | 'managers' | 'admin';
   target_id?: number;
   created_at?: string;
 }

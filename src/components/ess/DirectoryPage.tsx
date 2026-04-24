@@ -177,8 +177,8 @@ export default function DirectoryPage({
 
   // ── Filtered units by selected client ──
   const filteredUnits = useMemo(() => {
-    if (!selectedClient) return units;
-    return units.filter((u) => u.client_id === Number(selectedClient) || !u.client_id);
+    if (!selectedClient || selectedClient === 'all_clients') return units;
+    return units.filter((u) => Number(u.client_id) === Number(selectedClient) || !u.client_id);
   }, [units, selectedClient]);
 
   // ── Clear filters ──

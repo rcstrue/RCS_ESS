@@ -45,9 +45,17 @@ const STATUS_CONFIG: Record<
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────
+function safeParseDateTime(iso: string | undefined): Date | null {
+  if (!iso) return null;
+  // Handle MySQL datetime format "2025-01-15 09:30:00"
+  const normalized = iso.replace(' ', 'T');
+  const d = new Date(normalized);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function formatTime(iso: string | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
+  const d = safeParseDateTime(iso);
+  if (!d) return '—';
   return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
@@ -62,8 +70,9 @@ function formatDate(iso: string): string {
 
 function calculateHours(checkIn: string | undefined, checkOut: string | undefined): string {
   if (!checkIn) return '0h 0m';
-  const start = new Date(checkIn).getTime();
-  const end = checkOut ? new Date(checkOut).getTime() : Date.now();
+  const start = safeParseDateTime(checkIn)?.getTime();
+  const end = checkOut ? safeParseDateTime(checkOut)?.getTime() : Date.now();
+  if (!start || !end || end < start) return '0h 0m';
   const diffMs = end - start;
   const hours = Math.floor(diffMs / 3_600_000);
   const minutes = Math.floor((diffMs % 3_600_000) / 60_000);
@@ -298,6 +307,7 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
               <Skeleton className="h-16 rounded-lg" />
             </div>
           ) : todayRecord ? (
+            <>
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-lg border p-3">
                 <p className="text-xs text-muted-foreground">Check In</p>
@@ -317,10 +327,25 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
                 </Badge>
               </div>
               <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Hours Worked</p>
-                <p className="text-lg font-semibold">{calculateHours(todayRecord.check_in, todayRecord.check_out)}</p>
+                <p className="text-xs text-muted-foreground">
+                  Hours Worked
+                  {!todayRecord.check_out && todayRecord.check_in && (
+                    <span className="text-emerald-500 ml-1">● Live</span>
+                  )}
+                </p>
+                <p className="text-lg font-semibold tabular-nums">
+                  {calculateHours(todayRecord.check_in, todayRecord.check_out || undefined)}
+                </p>
               </div>
             </div>
+            {/* Location */}
+            {todayRecord.location && (
+              <div className="flex items-center gap-2 mt-3 px-1">
+                <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="text-xs text-muted-foreground">{todayRecord.location}</span>
+              </div>
+            )}
+            </>
           ) : (
             <div className="text-center py-6 text-muted-foreground">
               <CalendarDays className="h-8 w-8 mx-auto mb-2 opacity-50" />

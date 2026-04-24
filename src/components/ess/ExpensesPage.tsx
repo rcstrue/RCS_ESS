@@ -213,10 +213,10 @@ export function ExpensesPage({
   const summary = useMemo(() => {
     const pendingAmount = myExpenses
       .filter((e) => e.status === 'pending')
-      .reduce((sum, e) => sum + e.amount, 0);
+      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
     const approvedAmount = myExpenses
       .filter((e) => e.status === 'approved' || e.status === 'reimbursed')
-      .reduce((sum, e) => sum + e.amount, 0);
+      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
     return { pendingAmount, approvedAmount };
   }, [myExpenses]);
 
