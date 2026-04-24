@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -408,9 +409,13 @@ export function TasksPage({ employeeId, employeeName, role, canApprove }: TasksP
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium">Deadline</label>
+                <Label className="flex items-center gap-2">
+                  <CalendarDays className="w-3.5 h-3.5 text-muted-foreground" />
+                  Deadline
+                </Label>
                 <Input
                   type="date"
+                  className="h-11"
                   value={createDeadline}
                   onChange={(e) => setCreateDeadline(e.target.value)}
                   min={new Date().toISOString().split('T')[0]}

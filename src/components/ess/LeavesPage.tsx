@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -609,11 +610,14 @@ export default function LeavesPage({
             {/* Dates */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="start-date">Start Date *</Label>
-                <input
+                <Label htmlFor="start-date" className="flex items-center gap-2">
+                  <CalendarDays className="w-3.5 h-3.5 text-muted-foreground" />
+                  Start Date *
+                </Label>
+                <Input
                   id="start-date"
                   type="date"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="h-11"
                   value={applyForm.start_date}
                   onChange={(e) =>
                     setApplyForm((f) => ({ ...f, start_date: e.target.value }))
@@ -621,11 +625,14 @@ export default function LeavesPage({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="end-date">End Date *</Label>
-                <input
+                <Label htmlFor="end-date" className="flex items-center gap-2">
+                  <CalendarDays className="w-3.5 h-3.5 text-muted-foreground" />
+                  End Date *
+                </Label>
+                <Input
                   id="end-date"
                   type="date"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="h-11"
                   value={applyForm.end_date}
                   min={applyForm.start_date}
                   onChange={(e) =>
