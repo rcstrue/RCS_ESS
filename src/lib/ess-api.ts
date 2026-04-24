@@ -14,7 +14,7 @@ export async function essLogin(mobileNumber: string, pin: string) {
   });
 }
 
-export async function changePin(employee_id: number, current_pin: string, new_pin: string) {
+export async function changePin(employee_id: string | number, current_pin: string, new_pin: string) {
   return apiRequest('/ess/pin', {
     method: 'POST',
     body: JSON.stringify({ employee_id, current_pin, new_pin }),
@@ -22,13 +22,13 @@ export async function changePin(employee_id: number, current_pin: string, new_pi
 }
 
 // ===== Attendance =====
-export async function fetchAttendance(employee_id: number, month?: string) {
+export async function fetchAttendance(employee_id: string | number, month?: string) {
   const params = new URLSearchParams({ employee_id: String(employee_id) });
   if (month) params.set('month', month);
   return apiRequest<PaginatedResponse<AttendanceRecord>>(`/ess/attendance?${params}`);
 }
 
-export async function checkIn(data: { employee_id: number; location?: string }) {
+export async function checkIn(data: { employee_id: string | number; location?: string }) {
   return apiRequest<AttendanceRecord>('/ess/attendance', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -43,17 +43,17 @@ export async function checkOut(id: number) {
 }
 
 // ===== Leaves =====
-export async function fetchLeaves(employee_id: number, status?: string) {
+export async function fetchLeaves(employee_id: string | number, status?: string) {
   const params = new URLSearchParams({ employee_id: String(employee_id) });
   if (status) params.set('status', status);
   return apiRequest<PaginatedResponse<LeaveRequest>>(`/ess/leaves?${params}`);
 }
 
-export async function fetchLeaveBalance(employee_id: number) {
+export async function fetchLeaveBalance(employee_id: string | number) {
   return apiRequest<LeaveBalance[]>(`/ess/leaves?employee_id=${employee_id}&view=balance`);
 }
 
-export async function applyLeave(data: { employee_id: number; type: string; start_date: string; end_date: string; days: number; reason: string }) {
+export async function applyLeave(data: { employee_id: string | number; type: string; start_date: string; end_date: string; days: number; reason: string }) {
   return apiRequest<LeaveRequest>('/ess/leaves', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -91,13 +91,13 @@ export async function updateTask(id: number, data: Partial<Task>) {
 }
 
 // ===== Expenses =====
-export async function fetchExpenses(employee_id: number, status?: string) {
+export async function fetchExpenses(employee_id: string | number, status?: string) {
   const params = new URLSearchParams({ employee_id: String(employee_id) });
   if (status) params.set('status', status);
   return apiRequest<PaginatedResponse<Expense>>(`/ess/expenses?${params}`);
 }
 
-export async function createExpense(data: { employee_id: number; type: string; amount: number; expense_date: string; description?: string }) {
+export async function createExpense(data: { employee_id: string | number; type: string; amount: number; expense_date: string; description?: string }) {
   return apiRequest<Expense>('/ess/expenses', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -112,13 +112,13 @@ export async function approveExpense(id: number, status: string, approved_by: nu
 }
 
 // ===== Helpdesk =====
-export async function fetchHelpdeskTickets(employee_id: number, status?: string) {
+export async function fetchHelpdeskTickets(employee_id: string | number, status?: string) {
   const params = new URLSearchParams({ employee_id: String(employee_id) });
   if (status) params.set('status', status);
   return apiRequest<PaginatedResponse<HelpdeskTicket>>(`/ess/helpdesk?${params}`);
 }
 
-export async function createHelpdeskTicket(data: { employee_id: number; category: string; subject: string; description?: string; priority: string }) {
+export async function createHelpdeskTicket(data: { employee_id: string | number; category: string; subject: string; description?: string; priority: string }) {
   return apiRequest<HelpdeskTicket>('/ess/helpdesk', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -133,7 +133,7 @@ export async function fetchAnnouncements(target_scope?: string, target_id?: numb
   return apiRequest<Announcement[]>(`/ess/announcements?${params}`);
 }
 
-export async function createAnnouncement(data: { title: string; content: string; priority: string; target_scope: string; target_id?: number }) {
+export async function createAnnouncement(data: { title: string; content: string; priority: string; target_scope: string; target_id?: number; created_by?: string }) {
   return apiRequest<Announcement>('/ess/announcements', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -170,6 +170,6 @@ export async function fetchEmployees(params: { scope?: string; requester_id?: nu
 }
 
 // ===== Profile =====
-export async function fetchProfile(employee_id: number) {
+export async function fetchProfile(employee_id: string | number) {
   return apiRequest<{ employee: Employee; attendance_summary: AttendanceSummary; leave_balance: LeaveBalance[]; recent_attendance: AttendanceRecord[] }>(`/ess/filters?view=profile&employee_id=${employee_id}`);
 }

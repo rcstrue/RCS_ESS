@@ -872,7 +872,7 @@ function ChangePinDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  employeeId: number;
+  employeeId: string | number;
 }) {
   const [step, setStep] = useState<'current' | 'new' | 'confirm'>('current');
   const [currentPin, setCurrentPin] = useState('');

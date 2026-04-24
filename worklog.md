@@ -67,3 +67,36 @@ Stage Summary:
 - Frontend build successful (Vite)
 - User needs to upload api/ess/*.php to server AND dist/ files to fix the live app
 - config.php on server must already exist with real DB credentials (DO NOT overwrite)
+---
+Task ID: 1
+Agent: Main Agent
+Task: Assess and fix ESS application after old files were uploaded to production server
+
+Work Log:
+- Read all project files to assess current state
+- Found local codebase is CORRECT - all previous fixes are present in local files
+- The 404 on production is because old files were uploaded directly to join.rcsfacility.com server, bypassing git
+- login.php: ✅ Correct (birth year PIN, cache PIN, VARCHAR binding)
+- ESSApp.tsx: ✅ Shield imported, no duplicate currentPin
+- AnnouncementsPage.tsx: ✅ Shield imported
+- pin.php: ✅ Correct with birth year fallback
+- attendance.php: ✅ Correct with string binding, calcWorkingHours
+- expenses.php: ✅ Correct with formatExpenseRow, summary totals
+- employees.php: ✅ Correct with scope-based filtering
+- announcements.php: ✅ Had scope validation issue (fixed)
+
+Fixes Applied:
+1. Changed Employee.id type from `number` to `string | number` (VARCHAR compatibility)
+2. Changed all employee_id params in ess-api.ts from `number` to `string | number`
+3. Changed all component props (AttendancePage, LeavesPage, TasksPage, ExpensesPage, HelpdeskPage, DirectoryPage, AnnouncementsPage) employeeId from `number` to `string | number`
+4. Changed ChangePinDialog employeeId from `number` to `string | number`
+5. Added `created_by` field to createAnnouncement API call and type
+6. Added `managers` and `admin` to validScopes in announcements.php POST handler
+7. Added working_hours, latitude, longitude, note fields to AttendanceRecord type
+
+Stage Summary:
+- Local codebase is correct and compiles with zero TypeScript errors
+- Dev server running on port 8080
+- All type safety issues fixed for VARCHAR employee_id
+- Announcements now properly send created_by
+- The production server needs redeployment via git pipeline

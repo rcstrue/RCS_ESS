@@ -1,6 +1,6 @@
 // ===== Employee =====
 export interface Employee {
-  id: number;
+  id: string | number;
   employee_code: string;
   full_name: string;
   father_name?: string;
@@ -68,12 +68,16 @@ export interface ESSSession {
 // ===== Attendance =====
 export interface AttendanceRecord {
   id: number;
-  employee_id: number;
+  employee_id: string | number;
   date: string;
   status: 'present' | 'checked_in' | 'checked_out' | 'late' | 'absent' | 'leave' | 'holiday' | 'half_day';
   check_in?: string;
   check_out?: string;
   location?: string;
+  working_hours?: string;
+  latitude?: string | null;
+  longitude?: string | null;
+  note?: string | null;
 }
 
 export interface AttendanceSummary {
@@ -87,7 +91,7 @@ export interface AttendanceSummary {
 // ===== Leaves =====
 export interface LeaveRequest {
   id: number;
-  employee_id: number;
+  employee_id: string | number;
   employee_name?: string;
   employee_unit?: string;
   type: 'CL' | 'SL' | 'EL' | 'WFH' | 'Comp_Off' | 'LWP';
@@ -129,7 +133,7 @@ export interface Task {
 // ===== Expenses =====
 export interface Expense {
   id: number;
-  employee_id: number;
+  employee_id: string | number;
   employee_name?: string;
   type: 'advance' | 'expense';
   amount: number;
@@ -145,7 +149,7 @@ export interface Expense {
 // ===== Helpdesk =====
 export interface HelpdeskTicket {
   id: number;
-  employee_id: number;
+  employee_id: string | number;
   employee_name?: string;
   category: 'IT' | 'HR' | 'Admin' | 'Facility' | 'Payroll' | 'Other';
   subject: string;

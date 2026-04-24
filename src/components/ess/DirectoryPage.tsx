@@ -51,7 +51,7 @@ import {
 
 // ── Props ──────────────────────────────────────────────
 interface DirectoryPageProps {
-  employeeId: number;
+  employeeId: string | number;
   role: string;
   scope: string;
 }

@@ -24,7 +24,7 @@ import {
 
 // ─── Props ───────────────────────────────────────────────────────────
 interface AttendancePageProps {
-  employeeId: number;
+  employeeId: string | number;
   employeeName: string;
   role: string;
 }

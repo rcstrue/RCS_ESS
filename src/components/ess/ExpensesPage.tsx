@@ -50,7 +50,7 @@ import type { Expense, Employee } from '@/lib/ess-types';
 import { EXPENSE_TYPES } from '@/lib/ess-types';
 
 interface ExpensesPageProps {
-  employeeId: number;
+  employeeId: string | number;
   employeeName: string;
   role: string;
   canApprove: boolean;

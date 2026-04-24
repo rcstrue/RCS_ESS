@@ -47,7 +47,7 @@ import {
 
 // ─── Props ───────────────────────────────────────────────────────────
 interface LeavesPageProps {
-  employeeId: number;
+  employeeId: string | number;
   employeeName: string;
   role: string;
   canApprove: boolean;

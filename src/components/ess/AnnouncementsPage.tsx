@@ -42,7 +42,7 @@ import {
 
 // ── Props ──────────────────────────────────────────────
 interface AnnouncementsPageProps {
-  employeeId: number;
+  employeeId: string | number;
   role: string;
   canPost: boolean;
 }
@@ -162,6 +162,7 @@ export default function AnnouncementsPage({
         content: formContent.trim(),
         priority: formPriority,
         target_scope: formScope,
+        created_by: String(employeeId),
       });
       toast.success('Announcement posted successfully');
       setDialogOpen(false);

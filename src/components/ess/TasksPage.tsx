@@ -51,7 +51,7 @@ import type {
 import { TASK_PRIORITIES } from '@/lib/ess-types';
 
 interface TasksPageProps {
-  employeeId: number;
+  employeeId: string | number;
   employeeName: string;
   role: string;
   canApprove: boolean;

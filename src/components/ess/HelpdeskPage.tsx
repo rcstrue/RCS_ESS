@@ -43,7 +43,7 @@ import {
 
 // ── Props ──────────────────────────────────────────────
 interface HelpdeskPageProps {
-  employeeId: number;
+  employeeId: string | number;
   employeeName: string;
 }
 
