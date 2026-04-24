@@ -100,3 +100,22 @@ Stage Summary:
 - All type safety issues fixed for VARCHAR employee_id
 - Announcements now properly send created_by
 - The production server needs redeployment via git pipeline
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix CORS error for sid.rcsfacility.com (new testing domain) and add all PHP API files to git
+
+Work Log:
+- User reported CORS error: Access to fetch at 'https://join.rcsfacility.com/api/ess/login' from origin 'https://sid.rcsfacility.com' blocked by CORS policy
+- Created api/ess/cors.php with CORS headers and OPTIONS preflight handling
+- Updated all 13 PHP API files to include cors.php at the very top (before config.php)
+- Allowed origins: join.rcsfacility.com, sid.rcsfacility.com, localhost:5173, localhost:3000
+- Auto-allows any *.rcsfacility.com subdomain for future testing domains
+- Reviewed all PHP API files for known bugs - all correct (proper VARCHAR binding, fallback INSERT patterns)
+- Committed (009c86a) and pushed to GitHub main branch
+
+Stage Summary:
+- CORS fix deployed via git push to https://github.com/rcstrue/RCS_ESS
+- Server needs `git pull origin main` to get the updated files
+- All 13 API files now have proper CORS headers for cross-origin requests
+- No code changes needed on frontend - API base URL already points to join.rcsfacility.com
