@@ -35,7 +35,7 @@ jobs:
             set net:timeout 30;
             set net:max-retries 3;
             open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
-            cd public_html;
+            cd ess;
             lcd dist;
             mirror -R --no-symlinks --parallel=4 --no-perms --overwrite;
             quit
