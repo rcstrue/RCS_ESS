@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import type { ESSSession } from '@/lib/ess-types';
-import { getFileUrl } from '@/lib/api/config';
+import { getFileUrl, resetSessionExpiredGuard } from '@/lib/api/config';
 
 // Extracted modules
 import LoginScreen from './LoginScreen';
@@ -71,6 +71,7 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
   const saveSession = useCallback((s: ESSSession) => {
     localStorage.setItem('ess_employee', JSON.stringify(s));
     setSession(s);
+    resetSessionExpiredGuard();
   }, []);
 
   const clearSession = useCallback(() => {
@@ -111,11 +112,15 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
   // ── Dashboard ──
   const { dashboardData, dashboardLoading, checkInLoading, checkOutLoading, loadDashboardData, handleCheckIn, handleCheckOut } = useDashboard(session);
 
-  // Refresh when navigating back to dashboard
+  // Refresh when navigating BACK to dashboard (skip initial mount — useDashboard handles that)
+  const isFirstMount = useRef(true);
   useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
     if (currentPage === 'dashboard' && session) loadDashboardData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage]);
+  }, [currentPage, session, loadDashboardData]);
 
   // ── Loading ──
   if (!authReady) {

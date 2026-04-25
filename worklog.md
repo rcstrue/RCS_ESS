@@ -121,3 +121,32 @@ Stage Summary:
 - Force PIN change: Backend signals has_custom_pin=false → frontend shows 3-step PIN wizard
 - Session expiry: 401 responses trigger automatic logout with toast notification
 - PHP reference includes: JWT class (no composer dependency needed), handleLogin(), handleChangePin(), validateToken() middleware, database ALTER TABLE statements, router integration examples
+
+---
+Task ID: 6
+Agent: Main Agent
+Task: Fix 9 production bugs from QA report (unwrap crash, cross-midnight attendance, check-in response, leaves approve, toast spam, timezone, directory images, lockout handling, duplicate API calls)
+
+Work Log:
+- BUG #1 (CRITICAL): Rewrote `unwrap()` in ess-api.ts to handle `success: false` envelopes — extracts error/message and returns `{ data: null, error }` instead of passing the envelope through as data. Made `essLogin()` special — returns full envelope as data on failure so LoginScreen can read `is_locked`, `lockout_remaining`, `rate_limit_remaining`.
+- BUG #3: Added cross-midnight fallback in useDashboard.ts — if no today record found, checks latest record for `status=checked_in && !check_out` (overnight session). Applied to both `attData.items` and `profileData.recent_attendance`.
+- BUG #4: Fixed AttendancePage.tsx check-in/out handlers to always call `loadAttendance()` after success instead of trusting API response shape. Removed direct `setTodayRecord(data)` usage.
+- BUG #2: Rewrote `loadPendingTeamRequests()` in LeavesPage.tsx — now fetches team members via `fetchEmployees({ scope: 'team' })` first, then fetches each member's pending leaves in parallel with `Promise.allSettled`, merges and sorts by `created_at` descending. Added `fetchEmployees` import.
+- BUG #5: Added `_sessionExpiredFired` guard in config.ts — only dispatches `ess:session-expired` event once per logout cycle. Exported `resetSessionExpiredGuard()` function, called from ESSApp's `saveSession()` callback on successful login.
+- BUG #6: Added `parseIST()` helper to helpers.ts. Updated `formatTime()`, `formatDate()`, `calculateHours()` in AttendancePage.tsx to use `parseIST()`. Updated `formatAttTime()`, `calcHours()` in DashboardHome.tsx to use `parseIST()`. Updated `formatDate()` in ExpensesPage.tsx to use IST conversion. Added `todayISTString()` helper and used it for expense date input `max` attribute.
+- BUG #7: Wrapped all `profile_pic_url` usages in DirectoryPage.tsx with `getFileUrl()` — both the employee list avatar and the profile dialog avatar (2 locations). Added `getFileUrl` import.
+- BUG #8: Ensured lockout info (`is_locked`, `rate_limit_remaining`) is read from `data` BEFORE checking `error` in LoginScreen.tsx. The special `essLogin()` function now returns both data and error when PHP sends `success:false` with lockout metadata.
+- BUG #9: Added `isFirstMount` ref guard in ESSApp.tsx — skips the first execution of the `currentPage` useEffect, preventing duplicate `loadDashboardData()` call on initial mount (useDashboard already loads on session change).
+
+Stage Summary:
+- 8 files modified: ess-api.ts, useDashboard.ts, AttendancePage.tsx, LeavesPage.tsx, config.ts, helpers.ts, DashboardHome.tsx, ExpensesPage.tsx, DirectoryPage.tsx, LoginScreen.tsx, ESSApp.tsx
+- Zero TypeScript errors, zero ESLint errors from ESS files
+- unwrap() now correctly handles success:false, success:true, and non-envelope responses
+- Login preserves server lockout metadata through custom unwrap logic
+- Cross-midnight attendance sessions properly detected
+- Check-in/out always reloads from server for authoritative state
+- Team leaves approval fetches actual team members' leaves, not user's own
+- Session expired toast fires exactly once per logout cycle
+- All datetime parsing consistently uses IST timezone
+- Directory profile images use proper full URL via getFileUrl()
+- Dashboard loads exactly once on initial mount

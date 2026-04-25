@@ -10,24 +10,51 @@ import type {
 // unwrap - PHP wraps responses in { success, message, data }
 // apiRequest gives { data: <PHP envelope>, error }
 // This helper strips the envelope so callers get the actual payload
+// Handles: { success: true, data: ... } → { data: ..., error: null }
+//          { success: false, message/error: "..." } → { data: null, error: "..." }
+//          Raw responses (no envelope) → pass through unchanged
 // ══════════════════════════════════════════════════════════════
 function unwrap<T>(result: Promise<{ data: T | null; error: string | null }>): Promise<{ data: T | null; error: string | null }> {
   return result.then((res) => {
     if (res.error) return res;
     const d = res.data as Record<string, unknown> | null;
-    if (d && typeof d === 'object' && 'success' in d && 'data' in d) {
-      return { data: d.data as T, error: null };
+    if (d && typeof d === 'object' && 'success' in d) {
+      // PHP returned a success:false envelope — extract error message
+      if (d.success === false) {
+        const msg = (d.message as string) || (d.error as string) || 'Request failed';
+        return { data: null, error: msg };
+      }
+      // PHP returned a success:true envelope — extract inner data
+      if ('data' in d) {
+        return { data: d.data as T, error: null };
+      }
     }
     return res;
   });
 }
 
 // ===== Auth =====
+// Login is special: PHP may return { success: false, is_locked: true, lockout_remaining: ... }
+// alongside the error. We must NOT unwrap success:false into data:null for login,
+// because the caller needs access to is_locked, rate_limit_remaining, etc.
 export async function essLogin(mobileNumber: string, pin: string) {
-  return unwrap<LoginResponse>(apiRequest<LoginResponse>('/ess/login', {
+  return apiRequest<LoginResponse>('/ess/login', {
     method: 'POST',
     body: JSON.stringify({ mobileNumber, pin }),
-  }));
+  }).then((res) => {
+    if (res.error) return res;
+    const d = res.data as Record<string, unknown> | null;
+    if (d && typeof d === 'object' && 'success' in d) {
+      if (d.success === false) {
+        // Return the FULL envelope as data so LoginScreen can read is_locked, etc.
+        return { data: d as unknown as LoginResponse, error: (d.message as string) || (d.error as string) || 'Login failed' };
+      }
+      if ('data' in d) {
+        return { data: d.data as LoginResponse, error: null };
+      }
+    }
+    return res;
+  });
 }
 
 export async function changePin(employee_id: number, current_pin: string, new_pin: string) {

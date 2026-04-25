@@ -92,12 +92,20 @@ const formatCurrency = (amount: number): string =>
     maximumFractionDigits: 2,
   }).format(amount);
 
-const formatDate = (dateStr: string): string =>
-  new Date(dateStr).toLocaleDateString('en-IN', {
+const formatDate = (dateStr: string): string => {
+  const d = new Date(
+    new Date(dateStr).toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
+  );
+  return d.toLocaleDateString('en-IN', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
   });
+};
+
+/** Get today's date string in IST for the max attribute */
+const todayISTString = () =>
+  new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 // ── Main component ──
 export function ExpensesPage({
@@ -519,7 +527,7 @@ export function ExpensesPage({
                 type="date"
                 value={submitDate}
                 onChange={(e) => setSubmitDate(e.target.value)}
-                max={new Date().toISOString().split('T')[0]}
+                max={todayISTString()}
               />
             </div>
 

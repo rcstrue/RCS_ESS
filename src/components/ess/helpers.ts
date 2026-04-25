@@ -77,3 +77,10 @@ export function getISTMonthKey(): string {
   const ist = getCurrentISTDate();
   return `${ist.getFullYear()}-${String(ist.getMonth() + 1).padStart(2, '0')}`;
 }
+
+/** Parse a datetime string into an IST Date object */
+export function parseIST(datetimeString: string): Date {
+  return new Date(
+    new Date(datetimeString).toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
+  );
+}

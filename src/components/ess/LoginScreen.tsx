@@ -133,6 +133,7 @@ export default function LoginScreen({ onLogin, onBackToRegistration, onForcePinC
       const { data, error } = await essLogin(mobile.replace(/\D/g, ''), fullPin);
 
       // ── Server-side rate limit / lock response ──
+      // Read lockout info EVEN when error exists (PHP sends both)
       if (data?.is_locked) {
         const mins = Math.ceil((data.lockout_remaining || 1800) / 60);
         const rlInfo = recordFailedAttempt();
@@ -148,6 +149,7 @@ export default function LoginScreen({ onLogin, onBackToRegistration, onForcePinC
         return;
       }
 
+      // ── Generic error ──
       if (error) {
         // Record failed attempt on client side
         const rlInfo = recordFailedAttempt();

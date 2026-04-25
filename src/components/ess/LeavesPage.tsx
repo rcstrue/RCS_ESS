@@ -4,6 +4,7 @@ import {
   fetchLeaves,
   applyLeave,
   approveLeave,
+  fetchEmployees,
 } from '@/lib/ess-api';
 import type { LeaveRequest, LeaveBalance } from '@/lib/ess-types';
 import { LEAVE_TYPES } from '@/lib/ess-types';
@@ -174,12 +175,43 @@ export default function LeavesPage({
     if (!canApprove) return;
     try {
       setTeamRequestsLoading(true);
-      const { data: res, error: teamError } = await fetchLeaves(employeeId, 'pending');
-      if (teamError) {
-        toast.error(teamError);
+
+      // 1. Fetch team members first
+      const { data: empData } = await fetchEmployees({
+        scope: 'team',
+        requester_id: employeeId,
+        limit: 100,
+      });
+      const teamMembers = empData?.items ?? [];
+
+      if (teamMembers.length === 0) {
+        setPendingTeamRequests([]);
         return;
       }
-      setPendingTeamRequests(res?.items ?? []);
+
+      // 2. Fetch each member's pending leaves in parallel
+      const results = await Promise.allSettled(
+        teamMembers.map((member) =>
+          fetchLeaves(member.id, 'pending'),
+        ),
+      );
+
+      // 3. Merge all results
+      const allPending: LeaveRequest[] = [];
+      results.forEach((result) => {
+        if (result.status === 'fulfilled' && result.value.data?.items) {
+          allPending.push(...result.value.data.items);
+        }
+      });
+
+      // Sort by created_at descending (most recent first)
+      allPending.sort(
+        (a, b) =>
+          new Date(b.created_at ?? 0).getTime() -
+          new Date(a.created_at ?? 0).getTime(),
+      );
+
+      setPendingTeamRequests(allPending);
     } catch {
       toast.error('Failed to load team leave requests');
     } finally {

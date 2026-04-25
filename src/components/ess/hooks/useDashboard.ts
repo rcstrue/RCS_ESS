@@ -48,8 +48,23 @@ export function useDashboard(session: ESSSession | null) {
       if (attData?.items) {
         todayAttendance = attData.items.find((r: AttendanceRecord) => r.date === todayStr) ?? null;
       }
+      // Cross-midnight fallback: if no today record, find latest record
+      // that is still checked_in with no check_out (overnight session)
+      if (!todayAttendance && attData?.items?.length) {
+        const latestRecord = attData.items[attData.items.length - 1] as AttendanceRecord;
+        if (latestRecord?.status === 'checked_in' && !latestRecord.check_out) {
+          todayAttendance = latestRecord;
+        }
+      }
       if (!todayAttendance && profileData?.recent_attendance) {
         todayAttendance = profileData.recent_attendance.find((r: AttendanceRecord) => r.date === todayStr) ?? null;
+        // Cross-midnight fallback from profile data
+        if (!todayAttendance && profileData.recent_attendance.length) {
+          const latestProfile = profileData.recent_attendance[profileData.recent_attendance.length - 1];
+          if (latestProfile?.status === 'checked_in' && !latestProfile.check_out) {
+            todayAttendance = latestProfile;
+          }
+        }
       }
 
       const balances = Array.isArray(balanceData) ? balanceData : [];

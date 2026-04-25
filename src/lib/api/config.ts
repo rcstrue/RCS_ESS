@@ -6,6 +6,12 @@ const API_KEY = typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_API_K
   ? process.env.NEXT_PUBLIC_API_KEY
   : '';
 
+// Guard against duplicate session-expired toasts
+let _sessionExpiredFired = false;
+
+/** Reset the session-expired guard (call after successful login) */
+export function resetSessionExpiredGuard() { _sessionExpiredFired = false; }
+
 // Files base URL for displaying uploaded images
 export const FILES_BASE_URL = `${API_BASE_URL}/uploads`;
 
@@ -100,8 +106,11 @@ export async function apiRequest<T>(
         if (isEss) {
           localStorage.removeItem('ess_token');
           localStorage.removeItem('ess_employee');
-          // Dispatch a custom event so ESSApp can react without polling
-          window.dispatchEvent(new CustomEvent('ess:session-expired'));
+          // Dispatch only ONCE to prevent toast spam from concurrent 401s
+          if (!_sessionExpiredFired) {
+            _sessionExpiredFired = true;
+            window.dispatchEvent(new CustomEvent('ess:session-expired'));
+          }
           return { data: null, error: data?.error || data?.message || 'Session expired. Please login again.' };
         }
       }

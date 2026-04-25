@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { canApprove } from './helpers';
+import { canApprove, parseIST } from './helpers';
 import type { Employee, EmployeeRole, LeaveBalance, AttendanceRecord } from '@/lib/ess-types';
 
 import { Card, CardContent } from '@/components/ui/card';
@@ -93,13 +93,13 @@ export default function DashboardHome({
 
   const formatAttTime = (iso: string | undefined) => {
     if (!iso) return null;
-    const d = new Date((iso || '').replace(' ', 'T'));
+    const d = parseIST((iso || '').replace(' ', 'T'));
     return isNaN(d.getTime()) ? null : d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   };
   const calcHours = (cIn: string | undefined, cOut: string | undefined) => {
     if (!cIn) return null;
-    const start = new Date(cIn.replace(' ', 'T')).getTime();
-    const end = cOut ? new Date(cOut.replace(' ', 'T')).getTime() : Date.now();
+    const start = parseIST(cIn.replace(' ', 'T')).getTime();
+    const end = cOut ? parseIST(cOut.replace(' ', 'T')).getTime() : Date.now();
     if (!start || end < start) return null;
     const diffMs = end - start;
     const h = Math.floor(diffMs / 3600000);

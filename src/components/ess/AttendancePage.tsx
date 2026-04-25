@@ -6,6 +6,7 @@ import {
 } from '@/lib/ess-api';
 import type { AttendanceRecord } from '@/lib/ess-types';
 import { toast } from 'sonner';
+import { parseIST } from './helpers';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -47,12 +48,13 @@ const STATUS_CONFIG: Record<
 // ─── Helpers ─────────────────────────────────────────────────────────
 function formatTime(iso: string | undefined): string {
   if (!iso) return '—';
-  const d = new Date(iso);
+  const d = parseIST(iso);
   return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-IN', {
+  const d = parseIST(iso);
+  return d.toLocaleDateString('en-IN', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -62,8 +64,8 @@ function formatDate(iso: string): string {
 
 function calculateHours(checkIn: string | undefined, checkOut: string | undefined): string {
   if (!checkIn) return '0h 0m';
-  const start = new Date(checkIn).getTime();
-  const end = checkOut ? new Date(checkOut).getTime() : Date.now();
+  const start = parseIST(checkIn).getTime();
+  const end = checkOut ? parseIST(checkOut).getTime() : Date.now();
   const diffMs = end - start;
   const hours = Math.floor(diffMs / 3_600_000);
   const minutes = Math.floor((diffMs % 3_600_000) / 60_000);
@@ -161,15 +163,14 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
     try {
       setCheckInLoading(true);
       const location = await requestGeolocation();
-      const { data: checkInData, error: checkInError } = await checkIn({ employee_id: employeeId, location });
+      const { error: checkInError } = await checkIn({ employee_id: employeeId, location });
       if (checkInError) {
         toast.error(checkInError);
         return;
       }
-      if (checkInData) {
-        setTodayRecord(checkInData);
-        toast.success('Checked in successfully!');
-      }
+      toast.success('Checked in successfully!');
+      // Always reload attendance to get authoritative state
+      await loadAttendance();
     } catch {
       toast.error('Check-in failed. Please try again.');
     } finally {
@@ -185,15 +186,14 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
     }
     try {
       setCheckOutLoading(true);
-      const { data: checkOutData, error: checkOutError } = await checkOut(todayRecord.id);
+      const { error: checkOutError } = await checkOut(todayRecord.id);
       if (checkOutError) {
         toast.error(checkOutError);
         return;
       }
-      if (checkOutData) {
-        setTodayRecord(checkOutData);
-        toast.success('Checked out successfully!');
-      }
+      toast.success('Checked out successfully!');
+      // Always reload attendance to get authoritative state
+      await loadAttendance();
     } catch {
       toast.error('Check-out failed. Please try again.');
     } finally {

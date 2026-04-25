@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { getFileUrl } from '@/lib/api/config';
 import {
   fetchEmployees,
   fetchClients,
@@ -358,7 +359,7 @@ export default function DirectoryPage({
                 {/* Avatar */}
                 <div className="relative shrink-0">
                   <Avatar className="h-11 w-11">
-                    <AvatarImage src={emp.profile_pic_url} alt={emp.full_name} />
+                    <AvatarImage src={getFileUrl(emp.profile_pic_url) || undefined} alt={emp.full_name} />
                     <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
                       {getInitials(emp.full_name || 'U')}
                     </AvatarFallback>
@@ -446,7 +447,7 @@ export default function DirectoryPage({
                 {/* Avatar + Status */}
                 <div className="relative">
                   <Avatar className="h-20 w-20">
-                    <AvatarImage src={selectedEmployee.profile_pic_url} alt={selectedEmployee.full_name} />
+                    <AvatarImage src={getFileUrl(selectedEmployee.profile_pic_url) || undefined} alt={selectedEmployee.full_name} />
                     <AvatarFallback className="bg-primary/10 text-primary text-xl font-semibold">
                       {getInitials(selectedEmployee.full_name || 'U')}
                     </AvatarFallback>
