@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
-import { essLogin, fetchProfile, fetchLeaveBalance, fetchLeaves, fetchExpenses, fetchTasks } from '@/lib/ess-api';
+import { essLogin, fetchProfile, fetchLeaveBalance, fetchLeaves, fetchExpenses, fetchTasks, checkIn, checkOut, fetchAttendance } from '@/lib/ess-api';
 import type { Employee, EmployeeRole, ESSSession, LeaveBalance, AttendanceRecord } from '@/lib/ess-types';
 import { getFileUrl } from '@/lib/api/config';
 
@@ -53,6 +53,7 @@ import {
   Leaf,
   CheckCircle2,
   ListTodo,
+  Timer,
 } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════
@@ -146,7 +147,7 @@ const NAV_ITEMS = [
 ] as const;
 
 const MORE_MENU_ITEMS = [
-  { key: 'attendance', label: 'Attendance', icon: Clock, description: 'Check in/out & view history' },
+  { key: 'attendance', label: 'Attendance', icon: Clock, description: 'View attendance history' },
   { key: 'leaves', label: 'Leave', icon: CalendarDays, description: 'Apply & track leave requests' },
   { key: 'tasks', label: 'Tasks', icon: ClipboardList, description: 'Manage your task assignments' },
   { key: 'announcements', label: 'Notices', icon: Megaphone, description: 'Company announcements & updates' },
@@ -400,24 +401,78 @@ function DashboardHome({
   dashboardData,
   loading,
   onNavigate,
+  onCheckIn,
+  onCheckOut,
+  checkInLoading,
+  checkOutLoading,
 }: {
   employee: Employee;
   role: EmployeeRole;
   dashboardData: DashboardData | null;
   loading: boolean;
   onNavigate: (page: string) => void;
+  onCheckIn: () => Promise<void>;
+  onCheckOut: () => Promise<void>;
+  checkInLoading: boolean;
+  checkOutLoading: boolean;
 }) {
+  // Live clock
+  const [currentTime, setCurrentTime] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const hasApprovals = canApprove(role) && dashboardData
     && (dashboardData.pendingLeaves + dashboardData.pendingExpenses) > 0;
 
   const quickActions = [
-    { key: 'attendance', label: 'Attendance', icon: Clock, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    { key: 'attendance', label: 'History', icon: CalendarDays, color: 'text-emerald-600', bg: 'bg-emerald-50' },
     { key: 'leaves', label: 'Leave', icon: CalendarDays, color: 'text-blue-600', bg: 'bg-blue-50' },
     { key: 'tasks', label: 'Tasks', icon: ClipboardList, color: 'text-violet-600', bg: 'bg-violet-50' },
     { key: 'expenses', label: 'Expenses', icon: Receipt, color: 'text-amber-600', bg: 'bg-amber-50' },
     { key: 'announcements', label: 'Notices', icon: Megaphone, color: 'text-rose-600', bg: 'bg-rose-50' },
     { key: 'helpdesk', label: 'Help Desk', icon: CircleHelp, color: 'text-sky-600', bg: 'bg-sky-50' },
   ];
+
+  // Attendance helpers
+  const att = dashboardData?.todayAttendance;
+  const attStatus = att?.status || null;
+  const canCheckIn = !attStatus || attStatus === 'absent' || attStatus === 'holiday' || attStatus === 'leave';
+  const canCheckOut = attStatus === 'checked_in';
+  const isCheckedOut = attStatus === 'checked_out' || attStatus === 'present';
+
+  const formatAttTime = (iso: string | undefined) => {
+    if (!iso) return null;
+    const d = new Date((iso || '').replace(' ', 'T'));
+    return isNaN(d.getTime()) ? null : d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  };
+  const calcHours = (cIn: string | undefined, cOut: string | undefined) => {
+    if (!cIn) return null;
+    const start = new Date(cIn.replace(' ', 'T')).getTime();
+    const end = cOut ? new Date(cOut.replace(' ', 'T')).getTime() : Date.now();
+    if (!start || end < start) return null;
+    const diffMs = end - start;
+    const h = Math.floor(diffMs / 3600000);
+    const m = Math.floor((diffMs % 3600000) / 60000);
+    return `${h}h ${m}m`;
+  };
+
+  const statusLabel = !attStatus ? 'Not Marked' :
+    attStatus === 'checked_in' ? 'Checked In' :
+    attStatus === 'checked_out' ? 'Checked Out' :
+    attStatus === 'late' ? 'Late' :
+    attStatus === 'present' ? 'Present' :
+    attStatus === 'absent' ? 'Absent' : attStatus;
+  const statusColor = attStatus === 'checked_in' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+    attStatus === 'checked_out' ? 'bg-slate-100 text-slate-600 border-slate-200' :
+    attStatus === 'late' ? 'bg-amber-100 text-amber-700 border-amber-200' :
+    attStatus === 'present' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+    'bg-gray-100 text-gray-600 border-gray-200';
+  const checkInTime = formatAttTime(att?.check_in);
+  const checkOutTime = formatAttTime(att?.check_out);
+  const hoursWorked = calcHours(att?.check_in, att?.check_out);
+  const showHoursLive = !!checkInTime && !checkOutTime;
 
   return (
     <div className="space-y-5">
@@ -441,6 +496,119 @@ function DashboardHome({
           <ChevronRight className="w-4 h-4 text-amber-400 shrink-0" />
         </button>
       )}
+
+      {/* ═══ Attendance Check In/Out Card ═══ */}
+      <Card className="border-2 border-emerald-200 shadow-md overflow-hidden">
+        {/* Live clock header */}
+        <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 px-5 py-4 text-white text-center">
+          <div className="flex items-center justify-center gap-2 mb-0.5">
+            <Timer className="w-4 h-4 text-white/80" />
+            <p className="text-xs font-medium text-white/80 uppercase tracking-wider">Current Time</p>
+          </div>
+          <p className="text-3xl font-bold tabular-nums tracking-tight">
+            {currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+          </p>
+          <p className="text-xs text-white/70 mt-0.5">
+            {currentTime.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          </p>
+        </div>
+
+        <CardContent className="p-5 space-y-4">
+          {loading ? (
+            <div className="space-y-3">
+              <div className="flex justify-between gap-3">
+                <Skeleton className="h-16 flex-1 rounded-xl" />
+                <Skeleton className="h-16 flex-1 rounded-xl" />
+                <Skeleton className="h-16 flex-1 rounded-xl" />
+              </div>
+              <Skeleton className="h-12 w-full rounded-lg" />
+            </div>
+          ) : (
+            <>
+              {/* Status badge row */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-emerald-500" />
+                  <span className="text-sm font-medium text-gray-700">Today&apos;s Attendance</span>
+                </div>
+                <Badge variant="outline" className={`text-xs font-medium ${statusColor} ${attStatus === 'checked_in' ? 'animate-pulse' : ''}`}>
+                  {statusLabel}
+                </Badge>
+              </div>
+
+              {/* Check In / Check Out / Hours row */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 text-center">
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <LogIn className="w-3.5 h-3.5 text-emerald-600" />
+                    <p className="text-[10px] font-medium text-emerald-600 uppercase">Check In</p>
+                  </div>
+                  <p className="text-lg font-bold text-gray-900">{checkInTime || '—'}</p>
+                </div>
+                <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-3 text-center">
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <LogOut className="w-3.5 h-3.5 text-rose-600" />
+                    <p className="text-[10px] font-medium text-rose-600 uppercase">Check Out</p>
+                  </div>
+                  <p className="text-lg font-bold text-gray-900">{checkOutTime || '—'}</p>
+                </div>
+                <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-3 text-center">
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <Timer className="w-3.5 h-3.5 text-sky-600" />
+                    <p className="text-[10px] font-medium text-sky-600 uppercase">
+                      Hours {showHoursLive && <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" />}
+                    </p>
+                  </div>
+                  <p className="text-lg font-bold text-gray-900 tabular-nums">{hoursWorked || '—'}</p>
+                </div>
+              </div>
+
+              {/* Location */}
+              {att?.location && (
+                <div className="flex items-center gap-2 px-1">
+                  <div className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 shrink-0">
+                    <MapPin className="w-3 h-3 text-emerald-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-gray-400">Location</p>
+                    <p className="text-xs font-medium text-gray-700 truncate">{att.location}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="flex gap-3">
+                {canCheckIn && (
+                  <Button
+                    className="flex-1 h-12 text-base font-semibold bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-lg shadow-emerald-200"
+                    onClick={onCheckIn}
+                    disabled={checkInLoading}
+                  >
+                    {checkInLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
+                    {checkInLoading ? 'Checking In...' : 'Check In'}
+                  </Button>
+                )}
+                {canCheckOut && (
+                  <Button
+                    className="flex-1 h-12 text-base font-semibold bg-rose-600 hover:bg-rose-700 text-white gap-2 shadow-lg shadow-rose-200"
+                    onClick={onCheckOut}
+                    disabled={checkOutLoading}
+                  >
+                    {checkOutLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogOut className="w-5 h-5" />}
+                    {checkOutLoading ? 'Checking Out...' : 'Check Out'}
+                  </Button>
+                )}
+                {isCheckedOut && (
+                  <div className="flex-1 flex items-center justify-center gap-2 h-12 rounded-lg bg-emerald-50 border border-emerald-200">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    <span className="text-sm font-semibold text-emerald-700">Done for today</span>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 gap-3">
@@ -807,6 +975,8 @@ export default function ESSApp({ onBackToRegistration }: ESSAppProps) {
   // ── Dashboard Data ──
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [checkInLoading, setCheckInLoading] = useState(false);
+  const [checkOutLoading, setCheckOutLoading] = useState(false);
 
   // ── Session Management ──
   const loadSession = useCallback(() => {
@@ -855,13 +1025,16 @@ export default function ESSApp({ onBackToRegistration }: ESSAppProps) {
 
     try {
       const empId = session.employee.id;
+      const todayStr = todayDateString();
+      const monthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
 
-      const [profileRes, balanceRes, leavesRes, expensesRes, tasksRes] = await Promise.allSettled([
+      const [profileRes, balanceRes, leavesRes, expensesRes, tasksRes, attRes] = await Promise.allSettled([
         fetchProfile(empId),
         fetchLeaveBalance(empId),
         fetchLeaves(empId, 'pending'),
         fetchExpenses(empId, 'pending'),
         fetchTasks({ assigned_to: empId, status: 'pending' }),
+        fetchAttendance(empId, monthKey),
       ]);
 
       // Extract data from settled results
@@ -870,11 +1043,16 @@ export default function ESSApp({ onBackToRegistration }: ESSAppProps) {
       const leavesData = leavesRes.status === 'fulfilled' ? leavesRes.value?.data : null;
       const expensesData = expensesRes.status === 'fulfilled' ? expensesRes.value?.data : null;
       const tasksData = tasksRes.status === 'fulfilled' ? tasksRes.value?.data : null;
+      const attData = attRes.status === 'fulfilled' ? attRes.value?.data : null;
 
-      // Find today's attendance from profile
+      // Find today's attendance from attendance API (primary) or profile (fallback)
       let todayAttendance: AttendanceRecord | null = null;
-      const todayStr = todayDateString();
-      if (profileData?.recent_attendance) {
+      if (attData?.items) {
+        todayAttendance = attData.items.find(
+          (r: AttendanceRecord) => r.date === todayStr
+        ) ?? null;
+      }
+      if (!todayAttendance && profileData?.recent_attendance) {
         todayAttendance = profileData.recent_attendance.find(
           (r: AttendanceRecord) => r.date === todayStr
         ) ?? null;
@@ -898,6 +1076,51 @@ export default function ESSApp({ onBackToRegistration }: ESSAppProps) {
       setDashboardLoading(false);
     }
   }, [session]);
+
+  // ── Check In / Out Handlers ──
+  const handleDashboardCheckIn = useCallback(async () => {
+    if (!session || checkInLoading) return;
+    setCheckInLoading(true);
+    try {
+      const location = await new Promise<string>((resolve) => {
+        if (!navigator.geolocation) { resolve('Location unavailable'); return; }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve(`${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`),
+          () => resolve('Location denied'),
+          { enableHighAccuracy: true, timeout: 10000 },
+        );
+      });
+      const { data, error } = await checkIn({ employee_id: session.employee.id, location });
+      if (error) {
+        toast.error(error);
+      } else if (data) {
+        toast.success('Checked in successfully!');
+        loadDashboardData();
+      }
+    } catch {
+      toast.error('Check-in failed. Please try again.');
+    } finally {
+      setCheckInLoading(false);
+    }
+  }, [session, checkInLoading, loadDashboardData]);
+
+  const handleDashboardCheckOut = useCallback(async () => {
+    if (!session || !dashboardData?.todayAttendance?.id || checkOutLoading) return;
+    setCheckOutLoading(true);
+    try {
+      const { data, error } = await checkOut(dashboardData.todayAttendance.id);
+      if (error) {
+        toast.error(error);
+      } else if (data) {
+        toast.success('Checked out successfully!');
+        loadDashboardData();
+      }
+    } catch {
+      toast.error('Check-out failed. Please try again.');
+    } finally {
+      setCheckOutLoading(false);
+    }
+  }, [session, dashboardData, checkOutLoading, loadDashboardData]);
 
   useEffect(() => {
     if (session) {
@@ -1007,6 +1230,10 @@ export default function ESSApp({ onBackToRegistration }: ESSAppProps) {
               dashboardData={dashboardData}
               loading={dashboardLoading}
               onNavigate={navigate}
+              onCheckIn={handleDashboardCheckIn}
+              onCheckOut={handleDashboardCheckOut}
+              checkInLoading={checkInLoading}
+              checkOutLoading={checkOutLoading}
             />
           </div>
         )}
@@ -1036,7 +1263,7 @@ export default function ESSApp({ onBackToRegistration }: ESSAppProps) {
 
         {currentPage === 'attendance' && (
           <>
-            <PageHeader title="Attendance" subtitle="Mark & view your attendance" onBack={() => navigate('dashboard')} />
+            <PageHeader title="Attendance" subtitle="View your attendance history" onBack={() => navigate('dashboard')} />
             <AttendancePage
               employeeId={emp.id}
               employeeName={emp.full_name || 'Employee'}
