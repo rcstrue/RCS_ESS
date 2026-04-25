@@ -150,3 +150,28 @@ Stage Summary:
 - All datetime parsing consistently uses IST timezone
 - Directory profile images use proper full URL via getFileUrl()
 - Dashboard loads exactly once on initial mount
+
+---
+Task ID: 7
+Agent: Main Agent
+Task: Fix and deploy ESS web app - env variables, clean build, deployment, API routing, cache control
+
+Work Log:
+- Discovered project is Vite (not Next.js) — `process.env.NEXT_PUBLIC_API_KEY` NEVER works in browser
+- Fixed config.ts: Changed from `process.env.NEXT_PUBLIC_API_KEY` to `import.meta.env.VITE_API_KEY` with hardcoded fallback
+- Updated .env: Added `VITE_API_KEY=RCS_HRMS_SECURE_KEY_982374982374`
+- Created api/ess/.htaccess: Clean URL routing (login → login.php), CORS headers, cache control for API
+- Created api/.htaccess: RewriteEngine On
+- Created public_html/.htaccess: HTTPS redirect, SPA fallback, cache busting (HTML no-cache, hashed JS/CSS immutable), gzip, security headers
+- Clean build: `rm -rf dist/ && bun install && bun run build` → 1801 modules, output dist/ (index.html + 1 CSS + 1 JS)
+- Deployed: rsync --delete dist/ → public_html/, rsync --delete api/ → public_html/api/
+- Verified API key `RCS_HRMS_SECURE_KEY_982374982374` is baked into built JS bundle
+- Committed and pushed to GitHub (c68dea6)
+
+Stage Summary:
+- ROOT CAUSE of 403: `process.env` doesn't exist in Vite browser runtime → API_KEY was always empty string
+- FIXED: Now uses `import.meta.env.VITE_API_KEY` with hardcoded fallback guaranteeing the key is sent
+- Built JS size: 747KB (204KB gzipped), CSS: 93KB (16KB gzipped)
+- Deployment: dist/ + api/ deployed to ~/domains/join.rcsfacility.com/public_html/
+- .htaccess: SPA routing, cache-busting HTML, immutable hashed assets, CORS for API
+- Zero lint errors from ESS/API files
