@@ -71,4 +71,29 @@ Stage Summary:
 - All date comparisons now use IST timezone explicitly
 - Check-out gracefully handles missing attendance ID with toast error
 - NEXT_PUBLIC_API_KEY env variable needs to be set for API key fix to work
+---
+Task ID: 4
+Agent: Main Agent
+Task: Refactor ESSApp.tsx (1434 lines) into clean modular structure
+
+Work Log:
+- Read entire ESSApp.tsx (1434 lines) and all imported dependencies
+- Created helpers.ts (79 lines): detectRole, canApprove, getScope, getRoleBadge, getGreeting, getInitials, formatDate, todayDateString, getCurrentISTDate, getISTMonthKey
+- Created constants.ts (34 lines): NAV_ITEMS, MORE_MENU_ITEMS with icon imports
+- Created LoginScreen.tsx (243 lines): Mobile + PIN login with auto-focus, paste handling, loading state
+- Created DashboardHome.tsx (335 lines): Attendance card, live clock, check-in/out, summary cards, quick actions, approvals alert + exported DashboardData type + SummaryCard helper
+- Created ProfileView.tsx (105 lines): Avatar, profile fields, action buttons
+- Created SettingsView.tsx (119 lines): Dark mode toggle, app info, logout
+- Created PageHeader.tsx (34 lines): Back button + title + subtitle
+- Created BottomNav.tsx (82 lines): Fixed bottom nav with Sheet-based More menu, logout
+- Created hooks/useDashboard.ts (119 lines): All dashboard data loading (Promise.allSettled for 6 API calls), check-in/out handlers with geolocation, auto-load on session change
+- Rewrote ESSApp.tsx (165 lines): Pure orchestrator — auth state, navigation, routing, imports extracted modules
+
+Stage Summary:
+- ESSApp.tsx reduced from 1434 lines → 165 lines (89% reduction)
+- 10 new files created in src/components/ess/
+- Zero TypeScript errors, zero ESLint errors from ESS files
+- All functionality preserved: login, dashboard, attendance, navigation, check-in/out, profile, settings
+- Clean separation: helpers, constants, hooks, page components, layout components
+- No UI changes, no functionality changes — purely structural refactoring
 
