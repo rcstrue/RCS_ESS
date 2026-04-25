@@ -48,3 +48,27 @@ Stage Summary:
 - Added live clock + check-in/out controls + time/location display to home page
 - Check-in shows 400 on second attempt (already checked in) — handled gracefully with toast.error
 - Zero lint errors, dev server runs clean
+---
+Task ID: 3
+Agent: Main Agent
+Task: Fix 5 critical production issues from audit report
+
+Work Log:
+- Read and analyzed all 8 source files: config.ts, ess-api.ts, ESSApp.tsx, AttendancePage, LeavesPage, HelpdeskPage, AnnouncementsPage, DirectoryPage
+- Identified root causes for all 5 issues
+- Fix 1 (Systemic unwrap bug): Updated ALL 6 page components + ESSApp to properly destructure `{ data, error }` from API calls. Each call now checks error before using data.
+- Fix 2 (API key exposure): Replaced hardcoded `RCS_HRMS_SECURE_KEY_982374982374` with `process.env.NEXT_PUBLIC_API_KEY` in config.ts
+- Fix 3 (ESS auth token): Added dual token reading (admin_token || ess_token), X-Employee-ID header from ess_employee session, and token from session if present. Applied to both apiRequest and uploadBase64Image.
+- Fix 4 (Timezone mismatch): Replaced `todayDateString()` with IST-safe version using `toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })` in both ESSApp.tsx and AttendancePage.tsx. Also fixed monthKey generation in loadDashboardData.
+- Fix 5 (Check-out 400): Added explicit guard with user-facing toast error message when attendance ID is missing, in both ESSApp.tsx and AttendancePage.tsx handleCheckOut functions.
+- Verified: 0 TypeScript errors, 0 ESLint errors on all modified files
+
+Stage Summary:
+- 8 files modified: config.ts, ESSApp.tsx, AttendancePage.tsx, LeavesPage.tsx, HelpdeskPage.tsx, AnnouncementsPage.tsx, DirectoryPage.tsx
+- 20+ API call sites fixed from raw response usage to proper `{ data, error }` destructuring
+- API key no longer exposed in source code
+- ESS authentication now sends X-Employee-ID header on every request
+- All date comparisons now use IST timezone explicitly
+- Check-out gracefully handles missing attendance ID with toast error
+- NEXT_PUBLIC_API_KEY env variable needs to be set for API key fix to work
+

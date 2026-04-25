@@ -123,10 +123,12 @@ export default function DirectoryPage({
   const loadFilters = useCallback(async () => {
     setFiltersLoading(true);
     try {
-      const [clientsRes, unitsRes] = await Promise.all([
+      const [clientsResult, unitsResult] = await Promise.all([
         fetchClients(scope, employeeId),
         fetchUnits(scope, employeeId),
       ]);
+      const clientsRes = clientsResult?.data;
+      const unitsRes = unitsResult?.data;
       setClients(Array.isArray(clientsRes) ? clientsRes : []);
       setUnits(Array.isArray(unitsRes) ? unitsRes : []);
     } catch (err) {
@@ -141,7 +143,7 @@ export default function DirectoryPage({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchEmployees({
+      const { data: res, error: fetchError } = await fetchEmployees({
         scope,
         requester_id: employeeId,
         page,
@@ -150,9 +152,13 @@ export default function DirectoryPage({
         client_id: selectedClient ? Number(selectedClient) : undefined,
         unit_id: selectedUnit ? Number(selectedUnit) : undefined,
       });
-      setEmployees(res.items ?? []);
-      setTotal(res.pagination?.total ?? 0);
-      setTotalPages(res.pagination?.total_pages ?? Math.ceil((res.pagination?.total ?? 0) / PAGE_SIZE));
+      if (fetchError) {
+        toast.error(fetchError);
+        return;
+      }
+      setEmployees(res?.items ?? []);
+      setTotal(res?.pagination?.total ?? 0);
+      setTotalPages(res?.pagination?.total_pages ?? Math.ceil((res?.pagination?.total ?? 0) / PAGE_SIZE));
     } catch (err) {
       console.error('Failed to fetch employees:', err);
       setError('Failed to load directory. Please try again.');

@@ -2,7 +2,9 @@
 const API_BASE_URL = 'https://join.rcsfacility.com';
 
 // API Key for server-side validation
-const API_KEY = 'RCS_HRMS_SECURE_KEY_982374982374';
+const API_KEY = typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_API_KEY
+  ? process.env.NEXT_PUBLIC_API_KEY
+  : '';
 
 // Files base URL for displaying uploaded images
 export const FILES_BASE_URL = `${API_BASE_URL}/uploads`;
@@ -31,7 +33,7 @@ export async function apiRequest<T>(
   options: RequestInit = {}
 ): Promise<{ data: T | null; error: string | null }> {
   try {
-    const token = localStorage.getItem('admin_token');
+    const token = localStorage.getItem('admin_token') || localStorage.getItem('ess_token');
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-API-KEY': API_KEY,
@@ -39,6 +41,20 @@ export async function apiRequest<T>(
     };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const essSession = localStorage.getItem('ess_employee');
+    if (essSession) {
+      try {
+        const parsed = JSON.parse(essSession);
+        if (parsed?.employee?.id) {
+          headers['X-Employee-ID'] = String(parsed.employee.id);
+        }
+        // Also store token if the session has one
+        if (parsed?.token) {
+          headers['Authorization'] = `Bearer ${parsed.token}`;
+        }
+      } catch { /* invalid session */ }
     }
 
     const response = await fetch(`${API_BASE_URL}/api${endpoint}`, {
@@ -112,7 +128,20 @@ export async function uploadBase64Image(
   try {
     const response = await fetch(`${API_BASE_URL}/api/upload/base64`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-KEY': API_KEY },
+      headers: (() => {
+        const h: Record<string, string> = { 'Content-Type': 'application/json', 'X-API-KEY': API_KEY };
+        const t = localStorage.getItem('admin_token') || localStorage.getItem('ess_token');
+        if (t) h['Authorization'] = `Bearer ${t}`;
+        const ess = localStorage.getItem('ess_employee');
+        if (ess) {
+          try {
+            const parsed = JSON.parse(ess);
+            if (parsed?.employee?.id) h['X-Employee-ID'] = String(parsed.employee.id);
+            if (parsed?.token) h['Authorization'] = `Bearer ${parsed.token}`;
+          } catch { /* invalid session */ }
+        }
+        return h;
+      })(),
       body: JSON.stringify({ base64Data, filename, folder }),
     });
 

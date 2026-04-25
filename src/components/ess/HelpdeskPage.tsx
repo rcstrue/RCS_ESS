@@ -118,8 +118,12 @@ export default function HelpdeskPage({ employeeId, employeeName }: HelpdeskPageP
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchHelpdeskTickets(employeeId, activeFilter || undefined);
-      setTickets(res.items ?? []);
+      const { data: res, error: fetchError } = await fetchHelpdeskTickets(employeeId, activeFilter || undefined);
+      if (fetchError) {
+        toast.error(fetchError);
+        return;
+      }
+      setTickets(res?.items ?? []);
     } catch (err) {
       console.error('Failed to fetch helpdesk tickets:', err);
       setError('Failed to load tickets. Please try again.');
@@ -154,13 +158,17 @@ export default function HelpdeskPage({ employeeId, employeeName }: HelpdeskPageP
 
     setSubmitting(true);
     try {
-      await createHelpdeskTicket({
+      const { error: submitError } = await createHelpdeskTicket({
         employee_id: employeeId,
         category: formCategory,
         subject: formSubject.trim(),
         description: formDescription.trim() || undefined,
         priority: formPriority,
       });
+      if (submitError) {
+        toast.error(submitError);
+        return;
+      }
       toast.success('Ticket submitted successfully');
       setDialogOpen(false);
       resetForm();

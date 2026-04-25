@@ -135,8 +135,7 @@ function formatDate(dateStr: string): string {
 }
 
 function todayDateString(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 }
 
 const NAV_ITEMS = [
@@ -1026,7 +1025,9 @@ export default function ESSApp({ onBackToRegistration }: ESSAppProps) {
     try {
       const empId = session.employee.id;
       const todayStr = todayDateString();
-      const monthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+      const now = new Date();
+      const istMonth = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const monthKey = `${istMonth.getFullYear()}-${String(istMonth.getMonth() + 1).padStart(2, '0')}`;
 
       const [profileRes, balanceRes, leavesRes, expensesRes, tasksRes, attRes] = await Promise.allSettled([
         fetchProfile(empId),
@@ -1105,7 +1106,13 @@ export default function ESSApp({ onBackToRegistration }: ESSAppProps) {
   }, [session, checkInLoading, loadDashboardData]);
 
   const handleDashboardCheckOut = useCallback(async () => {
-    if (!session || !dashboardData?.todayAttendance?.id || checkOutLoading) return;
+    if (!session) return;
+    const attendanceId = dashboardData?.todayAttendance?.id;
+    if (!attendanceId) {
+      toast.error('No active check-in found. Please check in first.');
+      return;
+    }
+    if (checkOutLoading) return;
     setCheckOutLoading(true);
     try {
       const { data, error } = await checkOut(dashboardData.todayAttendance.id);

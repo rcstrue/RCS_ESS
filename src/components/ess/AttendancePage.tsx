@@ -87,8 +87,7 @@ function getFirstDayOfWeek(year: number, month: number): number {
 }
 
 function todayDateString(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 }
 
 // ─── Component ───────────────────────────────────────────────────────
@@ -116,7 +115,11 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
     try {
       setLoading(true);
       const monthKey = getMonthKey(navDate);
-      const res = await fetchAttendance(employeeId, monthKey);
+      const { data: res, error: fetchError } = await fetchAttendance(employeeId, monthKey);
+      if (fetchError) {
+        toast.error(fetchError);
+        return;
+      }
       const items = res?.items ?? [];
       setRecords(items);
 
@@ -158,9 +161,15 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
     try {
       setCheckInLoading(true);
       const location = await requestGeolocation();
-      const res = await checkIn({ employee_id: employeeId, location });
-      setTodayRecord(res);
-      toast.success('Checked in successfully!');
+      const { data: checkInData, error: checkInError } = await checkIn({ employee_id: employeeId, location });
+      if (checkInError) {
+        toast.error(checkInError);
+        return;
+      }
+      if (checkInData) {
+        setTodayRecord(checkInData);
+        toast.success('Checked in successfully!');
+      }
     } catch {
       toast.error('Check-in failed. Please try again.');
     } finally {
@@ -170,12 +179,21 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
 
   // Check Out
   const handleCheckOut = async () => {
-    if (!todayRecord?.id) return;
+    if (!todayRecord?.id) {
+      toast.error('No active check-in found. Please check in first.');
+      return;
+    }
     try {
       setCheckOutLoading(true);
-      const res = await checkOut(todayRecord.id);
-      setTodayRecord(res);
-      toast.success('Checked out successfully!');
+      const { data: checkOutData, error: checkOutError } = await checkOut(todayRecord.id);
+      if (checkOutError) {
+        toast.error(checkOutError);
+        return;
+      }
+      if (checkOutData) {
+        setTodayRecord(checkOutData);
+        toast.success('Checked out successfully!');
+      }
     } catch {
       toast.error('Check-out failed. Please try again.');
     } finally {

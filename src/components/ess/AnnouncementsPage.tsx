@@ -118,7 +118,11 @@ export default function AnnouncementsPage({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchAnnouncements();
+      const { data: res, error: fetchError } = await fetchAnnouncements();
+      if (fetchError) {
+        toast.error(fetchError);
+        return;
+      }
       setAnnouncements(Array.isArray(res) ? res : []);
     } catch (err) {
       console.error('Failed to fetch announcements:', err);
@@ -154,12 +158,16 @@ export default function AnnouncementsPage({
 
     setSubmitting(true);
     try {
-      await createAnnouncement({
+      const { error: submitError } = await createAnnouncement({
         title: formTitle.trim(),
         content: formContent.trim(),
         priority: formPriority,
         target_scope: formScope,
       });
+      if (submitError) {
+        toast.error(submitError);
+        return;
+      }
       toast.success('Announcement posted successfully');
       setDialogOpen(false);
       resetForm();

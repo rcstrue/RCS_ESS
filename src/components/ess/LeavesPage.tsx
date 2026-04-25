@@ -141,8 +141,12 @@ export default function LeavesPage({
   const loadBalances = useCallback(async () => {
     try {
       setBalanceLoading(true);
-      const res = await fetchLeaveBalance(employeeId);
-      setBalances(res ?? []);
+      const { data: res, error: balError } = await fetchLeaveBalance(employeeId);
+      if (balError) {
+        toast.error(balError);
+        return;
+      }
+      setBalances(Array.isArray(res) ? res : []);
     } catch {
       toast.error('Failed to load leave balance');
     } finally {
@@ -153,7 +157,11 @@ export default function LeavesPage({
   const loadMyRequests = useCallback(async () => {
     try {
       setMyRequestsLoading(true);
-      const res = await fetchLeaves(employeeId);
+      const { data: res, error: reqError } = await fetchLeaves(employeeId);
+      if (reqError) {
+        toast.error(reqError);
+        return;
+      }
       setMyRequests(res?.items ?? []);
     } catch {
       toast.error('Failed to load leave requests');
@@ -166,7 +174,11 @@ export default function LeavesPage({
     if (!canApprove) return;
     try {
       setTeamRequestsLoading(true);
-      const res = await fetchLeaves(employeeId, 'pending');
+      const { data: res, error: teamError } = await fetchLeaves(employeeId, 'pending');
+      if (teamError) {
+        toast.error(teamError);
+        return;
+      }
       setPendingTeamRequests(res?.items ?? []);
     } catch {
       toast.error('Failed to load team leave requests');
@@ -213,7 +225,7 @@ export default function LeavesPage({
     try {
       setApplyLoading(true);
       const days = calculateDays(applyForm.start_date, applyForm.end_date);
-      await applyLeave({
+      const { error: applyError } = await applyLeave({
         employee_id: employeeId,
         type: applyForm.type,
         start_date: applyForm.start_date,
@@ -221,6 +233,10 @@ export default function LeavesPage({
         days,
         reason: applyForm.reason.trim(),
       });
+      if (applyError) {
+        toast.error(applyError);
+        return;
+      }
       toast.success('Leave request submitted successfully');
       setApplyDialogOpen(false);
       setApplyForm({ type: '', start_date: '', end_date: '', reason: '' });
@@ -235,7 +251,11 @@ export default function LeavesPage({
   // ─── Cancel own request ──────────────────────────────────────
   const handleCancelLeave = async (id: number) => {
     try {
-      await approveLeave(id, 'cancelled', employeeId);
+      const { error: cancelError } = await approveLeave(id, 'cancelled', employeeId);
+      if (cancelError) {
+        toast.error(cancelError);
+        return;
+      }
       toast.success('Leave request cancelled');
       refreshAll();
     } catch {
@@ -246,7 +266,11 @@ export default function LeavesPage({
   // ─── Approve team leave ──────────────────────────────────────
   const handleApprove = async (id: number) => {
     try {
-      await approveLeave(id, 'approved', employeeId);
+      const { error: approveError } = await approveLeave(id, 'approved', employeeId);
+      if (approveError) {
+        toast.error(approveError);
+        return;
+      }
       toast.success('Leave request approved');
       loadPendingTeamRequests();
       loadMyRequests(); // refresh in case it's relevant
@@ -270,7 +294,11 @@ export default function LeavesPage({
     }
     try {
       setRejectLoading(true);
-      await approveLeave(rejectTarget.id, 'rejected', employeeId, rejectReason.trim());
+      const { error: rejectError } = await approveLeave(rejectTarget.id, 'rejected', employeeId, rejectReason.trim());
+      if (rejectError) {
+        toast.error(rejectError);
+        return;
+      }
       toast.success('Leave request rejected');
       setRejectDialogOpen(false);
       setRejectTarget(null);
