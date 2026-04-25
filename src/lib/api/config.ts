@@ -1,10 +1,10 @@
 // API Configuration - direct calls to backend server
 const API_BASE_URL = 'https://join.rcsfacility.com';
 
-// API Key for server-side validation
-const API_KEY = typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_API_KEY
-  ? process.env.NEXT_PUBLIC_API_KEY
-  : '';
+// API Key for server-side validation (Vite uses import.meta.env)
+const API_KEY = typeof import.meta !== 'undefined' && (import.meta as Record<string, Record<string, string>>).env?.VITE_API_KEY
+  ? (import.meta as Record<string, Record<string, string>>).env.VITE_API_KEY
+  : 'RCS_HRMS_SECURE_KEY_982374982374';
 
 // Guard against duplicate session-expired toasts
 let _sessionExpiredFired = false;
