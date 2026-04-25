@@ -49,11 +49,13 @@ const STATUS_CONFIG: Record<
 function formatTime(iso: string | undefined): string {
   if (!iso) return '—';
   const d = parseIST(iso);
+  if (isNaN(d.getTime())) return '—';
   return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
 function formatDate(iso: string): string {
   const d = parseIST(iso);
+  if (isNaN(d.getTime())) return iso;
   return d.toLocaleDateString('en-IN', {
     weekday: 'short',
     month: 'short',
@@ -65,6 +67,7 @@ function formatDate(iso: string): string {
 function calculateHours(checkIn: string | undefined, checkOut: string | undefined): string {
   if (!checkIn) return '0h 0m';
   const start = parseIST(checkIn).getTime();
+  if (isNaN(start)) return '0h 0m';
   const end = checkOut ? parseIST(checkOut).getTime() : Date.now();
   const diffMs = end - start;
   const hours = Math.floor(diffMs / 3_600_000);
@@ -104,6 +107,10 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
   const [checkOutLoading, setCheckOutLoading] = useState(false);
   const clockRef = useRef<ReturnType<typeof setInterval>>();
 
+  // Track the active attendance ID even across month navigations
+  // (user checks in one month, navigates to another, needs to check out)
+  const activeAttendanceRef = useRef<number | null>(null);
+
   // Live clock
   useEffect(() => {
     clockRef.current = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -129,6 +136,19 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
       const todayStr = todayDateString();
       const today = items.find((r) => r.date === todayStr) ?? null;
       setTodayRecord(today);
+
+      // Maintain cross-month active attendance ref
+      if (today?.status === 'checked_in' && !today.check_out) {
+        activeAttendanceRef.current = today.id;
+      } else if (todayRecord && todayRecord?.status === 'checked_in' && !today.check_out) {
+        // Today's previous record was checked in — keep tracking
+      } else {
+        // Check if the active ref still has an active record in the current month
+        const activeRecord = items.find((r) => r.id === activeAttendanceRef.current);
+        if (!activeRecord || activeRecord.check_out) {
+          activeAttendanceRef.current = null;
+        }
+      }
     } catch {
       toast.error('Failed to load attendance data');
     } finally {
@@ -163,10 +183,14 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
     try {
       setCheckInLoading(true);
       const location = await requestGeolocation();
-      const { error: checkInError } = await checkIn({ employee_id: employeeId, location });
+      const { data: checkInData, error: checkInError } = await checkIn({ employee_id: employeeId, location });
       if (checkInError) {
         toast.error(checkInError);
         return;
+      }
+      // Save the attendance ID for cross-month check-out
+      if (checkInData?.id) {
+        activeAttendanceRef.current = checkInData.id;
       }
       toast.success('Checked in successfully!');
       // Always reload attendance to get authoritative state
@@ -180,17 +204,20 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
 
   // Check Out
   const handleCheckOut = async () => {
-    if (!todayRecord?.id) {
+    // Use the tracked active attendance ID (cross-month safe), fall back to todayRecord
+    const attendanceId = todayRecord?.id || activeAttendanceRef.current;
+    if (!attendanceId) {
       toast.error('No active check-in found. Please check in first.');
       return;
     }
     try {
       setCheckOutLoading(true);
-      const { error: checkOutError } = await checkOut(todayRecord.id);
+      const { error: checkOutError } = await checkOut(attendanceId);
       if (checkOutError) {
         toast.error(checkOutError);
         return;
       }
+      activeAttendanceRef.current = null;
       toast.success('Checked out successfully!');
       // Always reload attendance to get authoritative state
       await loadAttendance();
@@ -224,7 +251,7 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
 
   const hasCheckedIn = todayRecord?.status === 'checked_in' || todayRecord?.status === 'checked_out';
   const canCheckIn = !todayRecord || todayRecord.status === 'absent' || todayRecord.status === 'holiday' || todayRecord.status === 'leave';
-  const canCheckOut = todayRecord?.status === 'checked_in';
+  const canCheckOut = todayRecord?.status === 'checked_in' || (activeAttendanceRef.current && !todayRecord?.check_out);
 
   // ─── Render ──────────────────────────────────────────────────────
   return (

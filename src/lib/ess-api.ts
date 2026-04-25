@@ -25,8 +25,13 @@ function unwrap<T>(result: Promise<{ data: T | null; error: string | null }>): P
         return { data: null, error: msg };
       }
       // PHP returned a success:true envelope — extract inner data
-      if ('data' in d) {
+      // Guard: data key may exist but be null (e.g. { success: true, data: null })
+      if ('data' in d && d.data != null) {
         return { data: d.data as T, error: null };
+      }
+      // success:true but data is null/missing → treat as empty result
+      if (d.success === true) {
+        return { data: null, error: null };
       }
     }
     return res;
@@ -49,8 +54,12 @@ export async function essLogin(mobileNumber: string, pin: string) {
         // Return the FULL envelope as data so LoginScreen can read is_locked, etc.
         return { data: d as unknown as LoginResponse, error: (d.message as string) || (d.error as string) || 'Login failed' };
       }
-      if ('data' in d) {
+      if ('data' in d && d.data != null) {
         return { data: d.data as LoginResponse, error: null };
+      }
+      // success:true but data is null/missing → treat as empty result
+      if (d.success === true) {
+        return { data: null, error: null };
       }
     }
     return res;
