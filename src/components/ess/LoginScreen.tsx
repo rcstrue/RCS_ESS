@@ -1,9 +1,15 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
 import { detectRole } from './helpers';
 import { essLogin } from '@/lib/ess-api';
+import {
+  storeEssToken,
+  clearRateLimit,
+  getRateLimitStatus,
+  recordFailedAttempt,
+} from '@/lib/ess-auth';
 import type { ESSSession } from '@/lib/ess-types';
 
 import { Button } from '@/components/ui/button';
@@ -13,21 +19,44 @@ import {
   Building2,
   LogIn,
   Loader2,
+  ShieldAlert,
+  Clock,
 } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════
-// LoginScreen Component
+// LoginScreen Component — JWT auth, rate-limit UI, force PIN
 // ══════════════════════════════════════════════════════════════
 
-export default function LoginScreen({ onLogin, onBackToRegistration }: {
+export default function LoginScreen({ onLogin, onBackToRegistration, onForcePinChange }: {
   onLogin: (session: ESSSession) => void;
   onBackToRegistration: () => void;
+  onForcePinChange: (session: ESSSession) => void;
 }) {
   const [mobile, setMobile] = useState('');
   const [pin, setPin] = useState(['', '', '', '']);
   const [showPin, setShowPin] = useState(false);
   const [loading, setLoading] = useState(false);
   const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // ── Rate limit state ──────────────────────────────────
+  const [rateLimit, setRateLimit] = useState(getRateLimitStatus());
+  const cooldownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Poll rate limit every second when active
+  useEffect(() => {
+    if (rateLimit.locked || rateLimit.cooldownRemaining > 0) {
+      cooldownTimer.current = setInterval(() => {
+        const status = getRateLimitStatus();
+        setRateLimit(status);
+        if (!status.locked && status.cooldownRemaining === 0) {
+          if (cooldownTimer.current) clearInterval(cooldownTimer.current);
+        }
+      }, 1000);
+      return () => {
+        if (cooldownTimer.current) clearInterval(cooldownTimer.current);
+      };
+    }
+  }, [rateLimit.locked, rateLimit.cooldownRemaining]);
 
   useEffect(() => {
     if (showPin) {
@@ -39,6 +68,10 @@ export default function LoginScreen({ onLogin, onBackToRegistration }: {
     const cleaned = mobile.replace(/\D/g, '');
     if (cleaned.length !== 10) {
       toast.error('Please enter a valid 10-digit mobile number');
+      return;
+    }
+    if (rateLimit.locked) {
+      toast.error('Account temporarily locked. Please try later.');
       return;
     }
     setShowPin(true);
@@ -78,39 +111,112 @@ export default function LoginScreen({ onLogin, onBackToRegistration }: {
     }
   };
 
-  const handleLogin = async () => {
+  const handleLogin = useCallback(async () => {
     const fullPin = pin.join('');
     if (fullPin.length !== 4) {
       toast.error('Please enter your 4-digit PIN');
       return;
     }
 
+    // Client-side rate limit check
+    if (rateLimit.locked) {
+      toast.error(`Account locked. Try again in ${Math.ceil(rateLimit.lockoutRemaining / 60)} minutes.`);
+      return;
+    }
+    if (rateLimit.remainingAttempts <= 0) {
+      toast.error(`Too many attempts. Wait ${rateLimit.cooldownRemaining}s.`);
+      return;
+    }
+
     setLoading(true);
     try {
       const { data, error } = await essLogin(mobile.replace(/\D/g, ''), fullPin);
-      if (error) {
-        toast.error(error);
+
+      // ── Server-side rate limit / lock response ──
+      if (data?.is_locked) {
+        const mins = Math.ceil((data.lockout_remaining || 1800) / 60);
+        const rlInfo = recordFailedAttempt();
+        setRateLimit(rlInfo);
+        toast.error(`Account locked for ${mins} minutes. Too many failed attempts.`);
         return;
       }
+
+      if (data?.rate_limit_remaining && data.rate_limit_remaining > 0) {
+        const rlInfo = recordFailedAttempt();
+        setRateLimit(rlInfo);
+        toast.error(`Too many attempts. Wait ${data.rate_limit_remaining}s or try again in a minute.`);
+        return;
+      }
+
+      if (error) {
+        // Record failed attempt on client side
+        const rlInfo = recordFailedAttempt();
+        setRateLimit(rlInfo);
+
+        if (rlInfo.locked) {
+          toast.error('Account locked for 30 minutes due to too many failed attempts.');
+        } else if (rlInfo.remainingAttempts > 0 && rlInfo.remainingAttempts <= 3) {
+          toast.error(`${error} (${rlInfo.remainingAttempts} attempt${rlInfo.remainingAttempts === 1 ? '' : 's'} remaining)`);
+        } else {
+          toast.error(error);
+        }
+        return;
+      }
+
       if (!data) {
+        const rlInfo = recordFailedAttempt();
+        setRateLimit(rlInfo);
         toast.error('Login failed. Please try again.');
         return;
       }
 
+      // ── Success ──
+      clearRateLimit();
+
+      // Store JWT token
+      if (data.token) {
+        storeEssToken(data.token);
+      }
+
       const role = detectRole(data.employee);
-      const session: ESSSession = { employee: data.employee, role };
+      const session: ESSSession = {
+        employee: data.employee,
+        role,
+        token: data.token,
+        token_expires_at: data.token_expires_at,
+      };
+
+      // Force PIN change on first login
+      if (!data.has_custom_pin) {
+        toast.warning('Please set a new PIN to continue.');
+        onForcePinChange(session);
+        return;
+      }
+
       onLogin(session);
     } catch {
+      const rlInfo = recordFailedAttempt();
+      setRateLimit(rlInfo);
       toast.error('Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [pin, mobile, rateLimit, onLogin, onForcePinChange]);
 
   const handleResend = () => {
     setPin(['', '', '', '']);
     setShowPin(false);
   };
+
+  // ── Format cooldown for display ───────────────────────
+  function formatCooldown(seconds: number): string {
+    if (seconds >= 60) {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}m ${secs}s`;
+    }
+    return `${seconds}s`;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -124,6 +230,40 @@ export default function LoginScreen({ onLogin, onBackToRegistration }: {
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">RCS Facility</h1>
           <p className="text-sm text-gray-500 mt-1">Employee Self-Service</p>
         </div>
+
+        {/* ── Lockdown Banner ── */}
+        {rateLimit.locked && (
+          <div className="w-full max-w-sm mb-4 p-4 bg-red-50 border border-red-200 rounded-xl space-y-2">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5 text-red-600 shrink-0" />
+              <p className="text-sm font-semibold text-red-800">Account Temporarily Locked</p>
+            </div>
+            <p className="text-xs text-red-600">
+              Too many failed login attempts. Your account has been locked for security.
+            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <Clock className="w-3.5 h-3.5 text-red-500" />
+              <p className="text-xs font-medium text-red-700">
+                Try again in {formatCooldown(rateLimit.lockoutRemaining)}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* ── Rate Limit Warning ── */}
+        {!rateLimit.locked && rateLimit.remainingAttempts <= 3 && rateLimit.remainingAttempts > 0 && showPin && (
+          <div className="w-full max-w-sm mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+              <p className="text-xs text-amber-700">
+                {rateLimit.remainingAttempts} attempt{rateLimit.remainingAttempts === 1 ? '' : 's'} remaining.
+                {rateLimit.cooldownRemaining > 0 && (
+                  <> Wait {formatCooldown(rateLimit.cooldownRemaining)} for reset.</>
+                )}
+              </p>
+            </div>
+          </div>
+        )}
 
         {!showPin ? (
           <div className="w-full max-w-sm space-y-6">
@@ -209,12 +349,17 @@ export default function LoginScreen({ onLogin, onBackToRegistration }: {
               <Button
                 className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
                 onClick={handleLogin}
-                disabled={pin.join('').length !== 4 || loading}
+                disabled={pin.join('').length !== 4 || loading || rateLimit.locked || rateLimit.remainingAttempts <= 0}
               >
                 {loading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Verifying...
+                  </>
+                ) : rateLimit.locked ? (
+                  <>
+                    <ShieldAlert className="w-4 h-4" />
+                    Locked
                   </>
                 ) : (
                   <>

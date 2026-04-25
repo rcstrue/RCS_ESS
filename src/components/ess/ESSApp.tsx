@@ -7,6 +7,7 @@ import { getFileUrl } from '@/lib/api/config';
 
 // Extracted modules
 import LoginScreen from './LoginScreen';
+import ForceChangePin from './ForceChangePin';
 import DashboardHome from './DashboardHome';
 import ProfileView from './ProfileView';
 import SettingsView from './SettingsView';
@@ -39,6 +40,7 @@ import { Building2, Loader2 } from 'lucide-react';
 export default function ESSApp({ onBackToRegistration }: { onBackToRegistration: () => void }) {
   // ── Auth ──
   const [session, setSession] = useState<ESSSession | null>(null);
+  const [forcePinSession, setForcePinSession] = useState<ESSSession | null>(null);
   const [authReady, setAuthReady] = useState(false);
 
   const loadSession = useCallback(() => {
@@ -54,6 +56,18 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
 
   useEffect(() => { loadSession(); setAuthReady(true); }, [loadSession]);
 
+  // ── Listen for session expiry (401 interceptor dispatches this) ──
+  useEffect(() => {
+    const handler = () => {
+      setSession(null);
+      setForcePinSession(null);
+      setCurrentPage('dashboard');
+      toast.error('Session expired. Please login again.');
+    };
+    window.addEventListener('ess:session-expired', handler);
+    return () => window.removeEventListener('ess:session-expired', handler);
+  }, []);
+
   const saveSession = useCallback((s: ESSSession) => {
     localStorage.setItem('ess_employee', JSON.stringify(s));
     setSession(s);
@@ -61,12 +75,24 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
 
   const clearSession = useCallback(() => {
     localStorage.removeItem('ess_employee');
+    localStorage.removeItem('ess_token');
     setSession(null);
+    setForcePinSession(null);
     setCurrentPage('dashboard');
     toast.success('Logged out successfully');
   }, []);
 
   const handleLogin = useCallback((s: ESSSession) => {
+    saveSession(s);
+    toast.success(`Welcome, ${s.employee.full_name}!`);
+  }, [saveSession]);
+
+  const handleForcePinChange = useCallback((s: ESSSession) => {
+    setForcePinSession(s);
+  }, []);
+
+  const handleForcePinComplete = useCallback((s: ESSSession) => {
+    setForcePinSession(null);
     saveSession(s);
     toast.success(`Welcome, ${s.employee.full_name}!`);
   }, [saveSession]);
@@ -100,8 +126,25 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
     );
   }
 
+  // ── Force PIN change screen ──
+  if (forcePinSession) {
+    return (
+      <ForceChangePin
+        session={forcePinSession}
+        onComplete={handleForcePinComplete}
+        onLogout={clearSession}
+      />
+    );
+  }
+
   if (!session) {
-    return <LoginScreen onLogin={handleLogin} onBackToRegistration={onBackToRegistration} />;
+    return (
+      <LoginScreen
+        onLogin={handleLogin}
+        onBackToRegistration={onBackToRegistration}
+        onForcePinChange={handleForcePinChange}
+      />
+    );
   }
 
   // ── Derived ──

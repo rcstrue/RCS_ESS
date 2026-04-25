@@ -97,3 +97,27 @@ Stage Summary:
 - Clean separation: helpers, constants, hooks, page components, layout components
 - No UI changes, no functionality changes — purely structural refactoring
 
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: Implement ESS JWT authentication system with rate limiting, account lock, and force PIN change
+
+Work Log:
+- Created src/lib/ess-auth.ts (152 lines): Token manager with JWT decode, expiry check, rate limit tracking (client-side), lockout management
+- Updated src/lib/ess-types.ts: Added token, token_expires_at, is_locked, lockout_remaining, rate_limit fields to LoginResponse; added token field to ESSSession
+- Updated src/lib/api/config.ts: Added 401 interceptor that clears ess_token + ess_employee, dispatches 'ess:session-expired' custom event
+- Created src/components/ess/ForceChangePin.tsx (234 lines): 3-step PIN change wizard (current → new → confirm) with progress dots, show/hide toggle, validation
+- Rewrote src/components/ess/LoginScreen.tsx (253 lines): Added JWT token storage, rate limit countdown timer, lockout banner, remaining-attempts warning, server-side lock/rate-limit response handling, force PIN change redirect
+- Updated src/components/ess/ESSApp.tsx: Added ForceChangePin import, forcePinSession state, handleForcePinChange/handleForcePinComplete callbacks, ess:session-expired event listener, force PIN routing before login screen
+- Created api/ess/auth-reference.php (300+ lines): Complete PHP reference implementation with JWT encode/decode, rate limiting (5/min per mobile+IP), account lock (10 failures → 30min lockout), force PIN change, validateToken middleware, database schema changes needed
+
+Stage Summary:
+- 4 new files created: ess-auth.ts, ForceChangePin.tsx, auth-reference.php
+- 4 files modified: ess-types.ts, api/config.ts, LoginScreen.tsx, ESSApp.tsx
+- Zero ESLint errors on all ESS files
+- Full JWT lifecycle: generate (PHP), store (localStorage), send (Authorization header), validate (PHP), expire (401 interceptor)
+- Rate limiting: Client-side tracking (5/min window, 10 failures → 30min lock) + server-side response handling
+- Force PIN change: Backend signals has_custom_pin=false → frontend shows 3-step PIN wizard
+- Session expiry: 401 responses trigger automatic logout with toast notification
+- PHP reference includes: JWT class (no composer dependency needed), handleLogin(), handleChangePin(), validateToken() middleware, database ALTER TABLE statements, router integration examples

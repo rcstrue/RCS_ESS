@@ -94,6 +94,17 @@ export async function apiRequest<T>(
     }
 
     if (!response.ok) {
+      // ── Token expiry / invalid → force re-login ──
+      if (response.status === 401) {
+        const isEss = localStorage.getItem('ess_token') || localStorage.getItem('ess_employee');
+        if (isEss) {
+          localStorage.removeItem('ess_token');
+          localStorage.removeItem('ess_employee');
+          // Dispatch a custom event so ESSApp can react without polling
+          window.dispatchEvent(new CustomEvent('ess:session-expired'));
+          return { data: null, error: data?.error || data?.message || 'Session expired. Please login again.' };
+        }
+      }
       return { data: null, error: data?.error || data?.message || 'Request failed' };
     }
 

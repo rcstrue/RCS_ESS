@@ -57,12 +57,20 @@ export type EmployeeRole = 'employee' | 'supervisor' | 'manager' | 'regional_man
 export interface LoginResponse {
   employee: Employee;
   role: EmployeeRole;
-  has_custom_pin: boolean;
+  token: string;                // JWT token from backend
+  token_expires_at?: string;    // ISO date when token expires
+  has_custom_pin: boolean;      // false = must change PIN on first login
+  is_locked?: boolean;          // true = account is locked (server-side)
+  lockout_remaining?: number;   // seconds until lockout expires
+  rate_limit_remaining?: number;// seconds until next attempt allowed
+  rate_limit_attempts_left?: number; // attempts remaining in current window
 }
 
 export interface ESSSession {
   employee: Employee;
   role: EmployeeRole;
+ token?: string;                // JWT stored in session for apiRequest
+  token_expires_at?: string;
 }
 
 // ===== Attendance =====
