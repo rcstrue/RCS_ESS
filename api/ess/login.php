@@ -58,13 +58,14 @@ try {
     $conn = getDbConnection();
 
     // Find employee by mobile number with approved status
-    // CRITICAL: Use explicit column list to avoid ambiguity with JOINs
-    // NOTE: Only use columns that actually exist in the employees table
+    // ONLY select columns confirmed to exist in the employees table.
+    // Confirmed via pin.php: pin, date_of_birth, id, status
+    // Others: add back one-by-one after verifying schema
     $stmt = $conn->prepare('
         SELECT
             e.id, e.full_name, e.mobile_number, e.email, e.designation, e.department,
-            e.state, e.date_of_joining, e.date_of_birth, e.gender,
-            e.employee_code, e.profile_pic_url, e.pin, e.has_custom_pin,
+            e.state, e.date_of_joining, e.date_of_birth,
+            e.employee_code, e.profile_pic_url, e.pin,
             e.employee_role, e.app_role, e.worker_category,
             e.client_id, e.unit_id, e.status,
             c.name AS client_name, c.client_code,
@@ -115,7 +116,7 @@ try {
 
     // ─── Update Employee Cache ────────────────────────────────────────────
     $employeeId = (string)$employee['id'];
-    $hasCustomPin = ($employee['has_custom_pin'] ?? 0) == 1 ? 1 : 0;
+    $hasCustomPin = 0; // column removed from SELECT — not in employees table
 
     // Upsert into ess_employee_cache
     $cacheStmt = $conn->prepare('
