@@ -198,3 +198,27 @@ Stage Summary:
 - After check-in: green Check In button disappears, red Check Out button appears automatically
 - After check-out: Check Out button disappears, "Done for today" message shows
 - Location always visible on dashboard attendance card
+
+---
+Task ID: 9
+Agent: Main Agent
+Task: Full production PHP API audit — fix all broken endpoints
+
+Work Log:
+- Audited all 11 PHP files in api/ess/ (config, attendance, filters, login, expenses, employees, leaves, tasks, helpdesk, announcements, pin)
+- Found 7 critical production bugs
+- Fixed config.php: Added ini_set('display_errors','0'), custom error/exception handlers, essLog() debug function, X-Content-Type-Options:nosniff header
+- Fixed attendance.php: Check-in now sets status='checked_in' (was 'present'/'late'), check-out sets status='checked_out'
+- Fixed leaves.php: bind_param('ssssss',...) had 6 types but 5 params → changed to 'sssss'
+- Fixed login.php: Replaced e.* with explicit column list to prevent is_active/name/status collisions with JOINs
+- Fixed tasks.php: Added t. prefix to all WHERE columns (assigned_to, assigned_by, status, priority)
+- Fixed announcements.php: Added a. prefix to all WHERE columns (target_scope, target_id, priority) + count query
+- All 11 files: Changed catch(Exception) to catch(Throwable) for complete error catching
+
+Stage Summary:
+- 11 files modified, 1 commit pushed (8203d18) to rcstrue/RCS_ESS main
+- ROOT CAUSE of HTML output: missing ini_set('display_errors',0) in config.php
+- ROOT CAUSE of check-in inconsistency: status was 'present' not 'checked_in'
+- ROOT CAUSE of attendance 400: leaves.php bind_param type mismatch
+- ROOT CAUSE of SQL ambiguity: bare column names in JOIN queries
+- All endpoints now have: JSON-only output, safe error handling, debug logging, proper CORS
