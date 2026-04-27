@@ -149,7 +149,7 @@ export async function fetchExpenses(employee_id: number, status?: string) {
   return unwrap<PaginatedResponse<Expense>>(apiRequest<PaginatedResponse<Expense>>(`/ess/expenses?${params}`));
 }
 
-export async function createExpense(data: { employee_id: number; type: string; amount: number; expense_date: string; description?: string }) {
+export async function createExpense(data: { employee_id: number; type: string; amount: number; expense_date: string; description?: string; bill_url?: string }) {
   return unwrap<Expense>(apiRequest<Expense>('/ess/expenses', {
     method: 'POST',
     body: JSON.stringify(data),

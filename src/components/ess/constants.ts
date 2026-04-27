@@ -14,6 +14,7 @@ import {
   CircleHelp,
   Settings,
   UserCircle,
+  UserPlus,
 } from 'lucide-react';
 
 export const NAV_ITEMS = [
@@ -31,4 +32,5 @@ export const MORE_MENU_ITEMS = [
   { key: 'helpdesk', label: 'Help Desk', icon: CircleHelp, description: 'Submit support tickets' },
   { key: 'profile', label: 'My Profile', icon: UserCircle, description: 'View your profile details' },
   { key: 'settings', label: 'Settings', icon: Settings, description: 'App preferences' },
+  { key: 'register', label: 'Register Employee', icon: UserPlus, description: 'Register a new employee' },
 ] as const;

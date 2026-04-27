@@ -14,13 +14,19 @@ interface BottomNavProps {
   showMoreMenu: boolean;
   setShowMoreMenu: (open: boolean) => void;
   onNavigate: (page: string) => void;
+  role?: string;
 }
 
-export default function BottomNav({ currentPage, showMoreMenu, setShowMoreMenu, onNavigate }: BottomNavProps) {
+export default function BottomNav({ currentPage, showMoreMenu, setShowMoreMenu, onNavigate, role }: BottomNavProps) {
+  const visibleNavItems = NAV_ITEMS.filter(item => {
+    if (item.key === 'directory' && role === 'employee') return false;
+    return true;
+  });
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t safe-area-bottom">
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-2">
-        {NAV_ITEMS.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = item.key === '_more'
             ? !['dashboard', 'directory', 'expenses'].includes(currentPage)
             : item.key === currentPage;
