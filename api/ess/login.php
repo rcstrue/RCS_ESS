@@ -2,9 +2,6 @@
 /**
  * ESS API — Login Endpoint
  * POST: Validate mobile + PIN, return JWT token and employee data
- *
- * Schema reference: rcsfaxhz_bolt.txt (actual phpMyAdmin dump)
- * employees table: pin (plaintext varchar), status enum, NO is_active, NO pin_hash, NO city, NO has_custom_pin
  */
 
 require_once __DIR__ . '/config.php';
@@ -18,10 +15,8 @@ try {
     validateApiKey();
 
     $input = getInput();
-    $mobile = trim($input['mobile_number'] ?? $input['mobileNumber'] ?? '');
+    $mobile = trim($input['mobile_number'] ?? '');
     $pin = trim($input['pin'] ?? '');
-
-    essLog("Login attempt: mobile=" . substr($mobile, 0, 4) . "****");
 
     // ─── Input Validation ─────────────────────────────────────────────────
     if (empty($mobile)) {
@@ -42,13 +37,13 @@ try {
     }
 
     $windowStart = time() - 60;
+    // Reset counter if window expired
     if ($rateData['last_attempt'] < $windowStart) {
         $rateData = ['attempts' => 0, 'last_attempt' => 0];
     }
 
     if ($rateData['attempts'] >= 5) {
         $retryAfter = 60 - (time() - $rateData['last_attempt']);
-        essLog("Rate limited: mobile=" . substr($mobile, 0, 4) . "****, attempts={$rateData['attempts']}");
         jsonOutput([
             'success' => false,
             'error' => 'Too many login attempts. Please try again later.',
@@ -57,23 +52,11 @@ try {
     }
 
     // ─── Database Lookup ──────────────────────────────────────────────────
-    // REAL SCHEMA: employees.status is enum('approved','pending_hr_verification','inactive','terminated','removed')
-    // employees.pin is varchar(10) PLAINTEXT (not hashed)
-    // NO is_active, NO pin_hash, NO has_custom_pin, NO city column
-    // app_role enum('employee','manager','regional_manager') EXISTS
-    // gender varchar(20) EXISTS
-    // district varchar(100) EXISTS (not city)
     $conn = getDbConnection();
 
+    // Find employee by mobile number with approved status
     $stmt = $conn->prepare('
-        SELECT
-            e.id, e.full_name, e.mobile_number, e.email, e.designation, e.department,
-            e.district, e.state, e.date_of_joining, e.date_of_birth, e.gender,
-            e.employee_code, e.profile_pic_url, e.pin,
-            e.employee_role, e.app_role, e.worker_category,
-            e.client_id, e.unit_id, e.status,
-            c.name AS client_name, c.client_code,
-            u.name AS unit_name
+        SELECT e.*, c.name AS client_name, c.client_code, u.name AS unit_name
         FROM employees e
         LEFT JOIN clients c ON c.id = e.client_id
         LEFT JOIN units u ON u.id = e.unit_id
@@ -88,15 +71,15 @@ try {
 
     if (!$employee) {
         _trackFailedAttempt($rateFile, $rateData);
-        essLog("Login failed: mobile not found or not approved");
         jsonOutput(['success' => false, 'error' => 'Invalid mobile number or PIN'], 401);
     }
 
-    // ─── PIN Validation (PLAINTEXT compare — real schema has pin varchar(10), not pin_hash) ─
+    // ─── PIN Validation ───────────────────────────────────────────────────
+    $storedPin = $employee['pin'];
     $validPin = false;
 
-    // Check stored PIN (plaintext)
-    if (!empty($employee['pin']) && $employee['pin'] === $pin) {
+    // Check stored PIN first
+    if (!empty($storedPin) && $storedPin === $pin) {
         $validPin = true;
     }
 
@@ -110,7 +93,6 @@ try {
 
     if (!$validPin) {
         _trackFailedAttempt($rateFile, $rateData);
-        essLog("Login failed: wrong PIN, emp={$employee['id']}");
         jsonOutput(['success' => false, 'error' => 'Invalid mobile number or PIN'], 401);
     }
 
@@ -119,10 +101,9 @@ try {
 
     // ─── Update Employee Cache ────────────────────────────────────────────
     $employeeId = (string)$employee['id'];
+    $hasCustomPin = ($employee['has_custom_pin'] ?? 0) == 1 ? 1 : 0;
 
-    // ess_employee_cache schema: city varchar(100), state varchar(100), pin varchar(4), employee_code varchar(50)
-    // employees table has NO city — use district for cache.city
-    // employees table has NO has_custom_pin — skip
+    // Upsert into ess_employee_cache
     $cacheStmt = $conn->prepare('
         INSERT INTO ess_employee_cache (
             employee_id, role, unit_id, unit_name, city, state,
@@ -147,16 +128,15 @@ try {
 
     $unitName = $employee['unit_name'] ?? '';
     $clientName = $employee['client_name'] ?? '';
-    $city = $employee['district'] ?? ''; // employees has district, not city
+    $city = $employee['city'] ?? '';
     $state = $employee['state'] ?? '';
     $profilePicUrl = $employee['profile_pic_url'] ?? '';
     $designation = $employee['designation'] ?? '';
-    $employeeCode = (string)($employee['employee_code'] ?? '');
-    $clientId = (string)($employee['client_id'] ?? '');
-    $unitId = (string)($employee['unit_id'] ?? '');
-    $storedPin = substr($employee['pin'] ?? '', 0, 4); // cache.pin is varchar(4)
+    $employeeCode = $employee['employee_code'] ?? '';
+    $clientId = (int)($employee['client_id'] ?? 0);
+    $unitId = (int)($employee['unit_id'] ?? 0);
 
-    $cacheStmt->bind_param('ssssssssssssss',
+    $cacheStmt->bind_param('ssissssissssssi',
         $employeeId, $role, $unitId, $unitName, $city, $state,
         $clientName, $clientId, $employee['full_name'], $employee['mobile_number'],
         $designation, $profilePicUrl, $storedPin, $employeeCode
@@ -180,21 +160,18 @@ try {
         'full_name' => $employee['full_name'],
         'mobile_number' => $employee['mobile_number'],
         'email' => $employee['email'] ?? '',
-        'designation' => $designation,
+        'designation' => $employee['designation'] ?? '',
         'department' => $employee['department'] ?? '',
         'employee_code' => $employeeCode,
         'role' => $role,
-        'has_custom_pin' => 0, // column doesn't exist in employees table
+        'has_custom_pin' => $hasCustomPin,
         'profile_pic_url' => $profilePicUrl,
-        'city' => $city, // populated from district
+        'city' => $city,
         'state' => $state,
         'unit_name' => $unitName,
         'client_name' => $clientName,
         'date_of_joining' => $employee['date_of_joining'] ?? '',
-        'gender' => $employee['gender'] ?? '',
     ];
-
-    essLog("Login success: emp={$employeeId}, role={$role}");
 
     jsonOutput([
         'success' => true,
@@ -205,21 +182,15 @@ try {
         ]
     ]);
 
-} catch (Throwable $e) {
-    essLog("FATAL login: {$e->getMessage()} in {$e->getFile()}:{$e->getLine()}");
-    jsonOutput([
-        'success' => false,
-        'error' => 'Internal server error',
-        '_debug' => [
-            'message' => $e->getMessage(),
-            'file' => basename($e->getFile()),
-            'line' => $e->getLine(),
-        ]
-    ], 500);
+} catch (Exception $e) {
+    jsonOutput(['success' => false, 'error' => 'Internal server error'], 500);
 }
 
 // ─── Helper Functions ─────────────────────────────────────────────────────────
 
+/**
+ * Track a failed login attempt
+ */
 function _trackFailedAttempt(string $rateFile, array $rateData): void
 {
     $rateData['attempts']++;
@@ -228,31 +199,29 @@ function _trackFailedAttempt(string $rateFile, array $rateData): void
 }
 
 /**
- * Determine role based on employee_role and app_role
- * Schema: employee_role enum('admin','manager','employee')
- *         app_role enum('employee','manager','regional_manager')
- *         worker_category enum('Skilled','Semi-Skilled','Unskilled','Supervisor','Manager','Other')
+ * Determine employee role based on employee_role and worker_category
  */
 function _determineRole(array $employee): string
 {
-    $appRole = strtolower($employee['app_role'] ?? 'employee');
-    $employeeRole = strtolower($employee['employee_role'] ?? 'employee');
+    $employeeRole = strtolower($employee['employee_role'] ?? '');
+    $appRole = strtolower($employee['app_role'] ?? '');
     $workerCategory = strtolower($employee['worker_category'] ?? '');
 
-    // app_role takes priority (most specific)
+    // Check app_role first (most specific)
     if (in_array($appRole, ['manager', 'regional_manager'])) {
         return $appRole;
     }
 
-    // employee_role
+    // Check employee_role
     if (in_array($employeeRole, ['admin', 'manager'])) {
         return $employeeRole;
     }
 
-    // worker_category for supervisor
+    // Check worker_category for supervisor roles
     if (strpos($workerCategory, 'supervisor') !== false) {
         return 'supervisor';
     }
 
+    // Default
     return 'employee';
 }

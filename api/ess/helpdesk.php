@@ -26,8 +26,7 @@ try {
         default:
             jsonOutput(['success' => false, 'error' => 'Method not allowed'], 405);
     }
-} catch (Throwable $e) {
-    essLog('FATAL helpdesk: ' . $e->getMessage());
+} catch (Exception $e) {
     jsonOutput(['success' => false, 'error' => 'Internal server error'], 500);
 }
 
@@ -133,12 +132,12 @@ function _handleCreateTicket(): void
     $conn = getDbConnection();
 
     // Validate required fields
-    $category = trim($input['category'] ?? '');
+    $category = ucfirst(strtolower(trim($input['category'] ?? '')));
     $subject = trim($input['subject'] ?? '');
     $description = trim($input['description'] ?? '');
     $priority = strtolower(trim($input['priority'] ?? 'medium'));
 
-    $validCategories = ['IT', 'HR', 'Admin', 'Facility', 'Payroll', 'Other'];
+    $validCategories = ['It', 'Hr', 'Admin', 'Facility', 'Payroll', 'Other'];
     $validPriorities = ['low', 'medium', 'high'];
 
     if (empty($category) || !in_array($category, $validCategories)) {

@@ -39,8 +39,7 @@ try {
         default:
             jsonOutput(['success' => false, 'error' => 'Invalid view parameter'], 400);
     }
-} catch (Throwable $e) {
-    essLog('FATAL filters: ' . $e->getMessage());
+} catch (Exception $e) {
     jsonOutput(['success' => false, 'error' => 'Internal server error'], 500);
 }
 
@@ -60,7 +59,7 @@ function _handleProfile(): void
             e.email,
             e.designation,
             e.department,
-            e.district AS emp_city,
+            e.city AS emp_city,
             e.state AS emp_state,
             e.date_of_joining,
             e.employee_code,
@@ -70,6 +69,7 @@ function _handleProfile(): void
             e.employee_role,
             e.app_role,
             e.worker_category,
+            e.has_custom_pin,
             e.status AS emp_status,
             ec.role AS cache_role,
             ec.unit_id,
@@ -413,7 +413,7 @@ function _handleEmployeeDirectory(): void
             e.department,
             e.employee_code,
             e.profile_pic_url,
-            e.district AS emp_city,
+            e.city AS emp_city,
             e.state AS emp_state,
             e.date_of_joining,
             e.employee_role,

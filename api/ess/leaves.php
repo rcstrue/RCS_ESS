@@ -26,8 +26,7 @@ try {
         default:
             jsonOutput(['success' => false, 'error' => 'Method not allowed'], 405);
     }
-} catch (Throwable $e) {
-    essLog('FATAL leaves: ' . $e->getMessage());
+} catch (Exception $e) {
     jsonOutput(['success' => false, 'error' => 'Internal server error'], 500);
 }
 
@@ -50,8 +49,6 @@ function _handleGetLeaves(): void
     $typeFilter = $_GET['type'] ?? '';
     $yearFilter = $_GET['year'] ?? '';
     [$page, $limit, $offset] = getPaginationParams();
-
-    essLog('GET leaves: emp=' . $queryEmployeeId . ', status=' . $statusFilter);
 
     // Build query
     $where = 'WHERE employee_id = ?';
@@ -170,7 +167,12 @@ function _handleApplyLeave(): void
     $conn = getDbConnection();
 
     // Validate required fields
-    $validTypes = ['CL', 'SL', 'EL', 'WFH', 'Comp_Off', 'LWP'];
+    $type = strtoupper(trim($input['type'] ?? ''));
+    $startDate = trim($input['start_date'] ?? '');
+    $endDate = trim($input['end_date'] ?? '');
+    $reason = trim($input['reason'] ?? '');
+
+    $validTypes = ['CL', 'SL', 'EL', 'WFH', 'COMP_OFF', 'LWP'];
 
     if (empty($type) || !in_array($type, $validTypes)) {
         jsonOutput(['success' => false, 'error' => 'Invalid leave type. Allowed: ' . implode(', ', $validTypes)], 400);
@@ -202,7 +204,7 @@ function _handleApplyLeave(): void
             (start_date <= ? AND end_date >= ?)
         )
     ');
-    $overlapStmt->bind_param('sssss', $employeeId, $startDate, $startDate, $endDate, $endDate);
+    $overlapStmt->bind_param('ssssss', $employeeId, $startDate, $startDate, $endDate, $endDate);
     $overlapStmt->execute();
     if ($overlapStmt->get_result()->num_rows > 0) {
         $overlapStmt->close();

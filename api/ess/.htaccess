@@ -1,66 +1,32 @@
-# RCS ESS API - Fixed & Production Safe
-
 RewriteEngine On
 
-# ----------------------------
-# CORS HEADERS
-# ----------------------------
-<IfModule mod_headers.c>
-    Header always set Access-Control-Allow-Origin "*"
-    Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
-    Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-API-KEY, X-Employee-ID"
-    Header always set Access-Control-Max-Age "86400"
-</IfModule>
-
-# ----------------------------
-# HANDLE PREFLIGHT OPTIONS
-# Return empty 200 immediately - do NOT rewrite to .php
-# ----------------------------
-<IfModule mod_rewrite.c>
-    RewriteCond %{REQUEST_METHOD} ^OPTIONS$
-    RewriteRule ^ - [R=200,L]
-</IfModule>
-
-# ----------------------------
-# ROUTE CLEAN URLS → PHP FILES
-# Only rewrite if the requested file does NOT exist on disk
-# ----------------------------
+# If the request is NOT a real file, append .php
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^([a-zA-Z0-9_-]+)$ $1.php [L]
+RewriteRule ^(.*)$ $1.php [QSA,L]
 
-# ----------------------------
-# BLOCK DIRECT CONFIG ACCESS
-# config.php is loaded via require() (filesystem), not HTTP.
-# Block web access to prevent DB credentials leaking.
-# ----------------------------
-<FilesMatch "config\.php$">
-    <IfModule mod_authz_core.c>
-        Require all denied
-    </IfModule>
-    <IfModule !mod_authz_core.c>
-        Order allow,deny
-        Deny from all
-    </IfModule>
-</FilesMatch>
-
-# ----------------------------
-# BLOCK DOTFILES
-# ----------------------------
+# Security: Deny direct access to sensitive files
 <FilesMatch "^\.">
-    <IfModule mod_authz_core.c>
-        Require all denied
-    </IfModule>
-    <IfModule !mod_authz_core.c>
-        Order allow,deny
-        Deny from all
-    </IfModule>
+    Order allow,deny
+    Deny from all
 </FilesMatch>
 
-# ----------------------------
-# NO-CACHE FOR API RESPONSES
-# ----------------------------
+# CORS headers for API requests
 <IfModule mod_headers.c>
-    Header always set Cache-Control "no-store, no-cache, must-revalidate"
-    Header always set Pragma "no-cache"
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-API-KEY, X-Employee-ID"
+    Header set Access-Control-Max-Age "86400"
+</IfModule>
+
+# Handle preflight requests
+<IfModule mod_rewrite.c>
+    RewriteCond %{REQUEST_METHOD} OPTIONS
+    RewriteRule ^(.*)$ $1.php [QSA,L]
+</IfModule>
+
+# Cache control for API responses
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType application/json "access plus 0 seconds"
 </IfModule>

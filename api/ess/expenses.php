@@ -26,8 +26,7 @@ try {
         default:
             jsonOutput(['success' => false, 'error' => 'Method not allowed'], 405);
     }
-} catch (Throwable $e) {
-    essLog('FATAL expenses: ' . $e->getMessage());
+} catch (Exception $e) {
     jsonOutput(['success' => false, 'error' => 'Internal server error'], 500);
 }
 
@@ -171,8 +170,14 @@ function _handleCreateExpense(): void
         $expenseDate = date('Y-m-d');
     }
 
-    // Find manager — manager_id column doesn't exist in ess_employee_cache, skip it
+    // Find manager from cache
     $managerId = null;
+    $managerStmt = $conn->prepare('SELECT manager_id FROM ess_employee_cache WHERE employee_id = ?');
+    $managerStmt->bind_param('s', $employeeId);
+    $managerStmt->execute();
+    $mgr = $managerStmt->get_result()->fetch_assoc();
+    $managerStmt->close();
+    // Note: manager_id may not be in cache — use null if not found
 
     // Insert expense
     $stmt = $conn->prepare('

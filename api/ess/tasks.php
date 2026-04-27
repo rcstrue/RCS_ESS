@@ -26,8 +26,7 @@ try {
         default:
             jsonOutput(['success' => false, 'error' => 'Method not allowed'], 405);
     }
-} catch (Throwable $e) {
-    essLog('FATAL tasks: ' . $e->getMessage());
+} catch (Exception $e) {
     jsonOutput(['success' => false, 'error' => 'Internal server error'], 500);
 }
 
@@ -45,38 +44,36 @@ function _handleGetTasks(): void
     [$page, $limit, $offset] = getPaginationParams();
 
     // Build where clause — always filter so user sees relevant tasks
-    // Use t. prefix since data query JOINs ess_employee_cache
-    $where = 'WHERE (t.assigned_to = ? OR t.assigned_by = ?)';
+    $where = 'WHERE (assigned_to = ? OR assigned_by = ?)';
     $types = 'ss';
     $params = [$authId, $authId];
 
     if (!empty($assignedTo)) {
-        $where .= ' AND t.assigned_to = ?';
+        $where .= ' AND assigned_to = ?';
         $types .= 's';
         $params[] = $assignedTo;
     }
 
     if (!empty($assignedBy)) {
-        $where .= ' AND t.assigned_by = ?';
+        $where .= ' AND assigned_by = ?';
         $types .= 's';
         $params[] = $assignedBy;
     }
 
     if (!empty($statusFilter)) {
-        $where .= ' AND t.status = ?';
+        $where .= ' AND status = ?';
         $types .= 's';
         $params[] = $statusFilter;
     }
 
     if (!empty($priorityFilter)) {
-        $where .= ' AND t.priority = ?';
+        $where .= ' AND priority = ?';
         $types .= 's';
         $params[] = $priorityFilter;
     }
 
-    // Count query uses t alias
-    $countQuery = "SELECT COUNT(*) AS total FROM ess_tasks t {$where}";
-    $countStmt = $conn->prepare($countQuery);
+    // Count
+    $countStmt = $conn->prepare("SELECT COUNT(*) AS total FROM ess_tasks {$where}");
     $countStmt->bind_param($types, ...$params);
     $countStmt->execute();
     $total = (int)$countStmt->get_result()->fetch_assoc()['total'];
@@ -124,7 +121,7 @@ function _handleGetTasks(): void
             'priority' => $row['priority'],
             'status' => $row['status'],
             'deadline' => $row['deadline'] ?? '',
-            'unit_id' => $row['unit_id'] ?? null,
+            'unit_id' => $row['unit_id'] ? (int)$row['unit_id'] : null,
             'created_at' => $row['created_at'],
             'updated_at' => $row['updated_at'],
         ];
@@ -154,7 +151,7 @@ function _handleCreateTask(): void
     $priority = strtolower(trim($input['priority'] ?? 'medium'));
     $deadline = trim($input['deadline'] ?? '');
     $description = trim($input['description'] ?? '');
-    $unitId = !empty($input['unit_id']) ? (string)$input['unit_id'] : null;
+    $unitId = !empty($input['unit_id']) ? (int)$input['unit_id'] : null;
 
     $validPriorities = ['low', 'medium', 'high', 'urgent'];
 
@@ -178,7 +175,7 @@ function _handleCreateTask(): void
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ');
     $pendingStatus = 'pending';
-    $stmt->bind_param('sssssss',
+    $stmt->bind_param('ssssssi',
         $title, $description, $assignedTo, $employeeId, $priority, $deadline ?: null, $unitId
     );
     $stmt->execute();
@@ -236,7 +233,7 @@ function _handleUpdateTask(): void
         'priority' => 's',
         'status' => 's',
         'deadline' => 's',
-        'unit_id' => 's',
+        'unit_id' => 'i',
     ];
 
     $validPriorities = ['low', 'medium', 'high', 'urgent'];

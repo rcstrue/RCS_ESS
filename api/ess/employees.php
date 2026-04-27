@@ -70,7 +70,7 @@ try {
                     if (!empty($teamWhere)) {
                         $teamWhere .= ' OR ';
                     }
-                    $teamWhere .= 'e.district = ?';
+                    $teamWhere .= 'e.city = ?';
                     $teamTypes .= 's';
                     $teamParams[] = $cacheData['city'];
                 }
@@ -158,7 +158,7 @@ try {
             e.department,
             e.employee_code,
             e.profile_pic_url,
-            e.district AS emp_city,
+            e.city AS emp_city,
             e.state AS emp_state,
             e.date_of_joining,
             e.employee_role,
@@ -213,7 +213,6 @@ try {
         ]
     ]);
 
-} catch (Throwable $e) {
-    essLog('FATAL employees: ' . $e->getMessage());
+} catch (Exception $e) {
     jsonOutput(['success' => false, 'error' => 'Internal server error'], 500);
 }
