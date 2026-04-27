@@ -15,7 +15,7 @@ try {
     validateApiKey();
 
     $input = getInput();
-    $mobile = trim($input['mobile_number'] ?? '');
+    $mobile = trim($input['mobile_number'] ?? $input['mobileNumber'] ?? '');
     $pin = trim($input['pin'] ?? '');
 
     essLog("Login attempt: mobile=" . substr($mobile, 0, 4) . "****");
