@@ -173,7 +173,7 @@ function _handleCreateAnnouncement(): void
     $targetId = trim($input['target_id'] ?? '');
     $priority = strtolower(trim($input['priority'] ?? 'normal'));
 
-    $validScopes = ['all', 'unit', 'city', 'region'];
+    $validScopes = ['all', 'managers', 'admin'];
     $validPriorities = ['low', 'normal', 'high', 'urgent'];
 
     if (empty($title)) {

@@ -171,14 +171,8 @@ function _handleCreateExpense(): void
         $expenseDate = date('Y-m-d');
     }
 
-    // Find manager from cache
+    // Find manager — manager_id column doesn't exist in ess_employee_cache, skip it
     $managerId = null;
-    $managerStmt = $conn->prepare('SELECT manager_id FROM ess_employee_cache WHERE employee_id = ?');
-    $managerStmt->bind_param('s', $employeeId);
-    $managerStmt->execute();
-    $mgr = $managerStmt->get_result()->fetch_assoc();
-    $managerStmt->close();
-    // Note: manager_id may not be in cache — use null if not found
 
     // Insert expense
     $stmt = $conn->prepare('

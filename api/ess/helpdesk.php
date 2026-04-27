@@ -133,12 +133,12 @@ function _handleCreateTicket(): void
     $conn = getDbConnection();
 
     // Validate required fields
-    $category = ucfirst(strtolower(trim($input['category'] ?? '')));
+    $category = trim($input['category'] ?? '');
     $subject = trim($input['subject'] ?? '');
     $description = trim($input['description'] ?? '');
     $priority = strtolower(trim($input['priority'] ?? 'medium'));
 
-    $validCategories = ['It', 'Hr', 'Admin', 'Facility', 'Payroll', 'Other'];
+    $validCategories = ['IT', 'HR', 'Admin', 'Facility', 'Payroll', 'Other'];
     $validPriorities = ['low', 'medium', 'high'];
 
     if (empty($category) || !in_array($category, $validCategories)) {

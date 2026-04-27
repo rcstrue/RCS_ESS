@@ -124,7 +124,7 @@ function _handleGetTasks(): void
             'priority' => $row['priority'],
             'status' => $row['status'],
             'deadline' => $row['deadline'] ?? '',
-            'unit_id' => $row['unit_id'] ? (int)$row['unit_id'] : null,
+            'unit_id' => $row['unit_id'] ?? null,
             'created_at' => $row['created_at'],
             'updated_at' => $row['updated_at'],
         ];
@@ -154,7 +154,7 @@ function _handleCreateTask(): void
     $priority = strtolower(trim($input['priority'] ?? 'medium'));
     $deadline = trim($input['deadline'] ?? '');
     $description = trim($input['description'] ?? '');
-    $unitId = !empty($input['unit_id']) ? (int)$input['unit_id'] : null;
+    $unitId = !empty($input['unit_id']) ? (string)$input['unit_id'] : null;
 
     $validPriorities = ['low', 'medium', 'high', 'urgent'];
 
@@ -178,7 +178,7 @@ function _handleCreateTask(): void
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ');
     $pendingStatus = 'pending';
-    $stmt->bind_param('ssssssi',
+    $stmt->bind_param('sssssss',
         $title, $description, $assignedTo, $employeeId, $priority, $deadline ?: null, $unitId
     );
     $stmt->execute();
@@ -236,7 +236,7 @@ function _handleUpdateTask(): void
         'priority' => 's',
         'status' => 's',
         'deadline' => 's',
-        'unit_id' => 'i',
+        'unit_id' => 's',
     ];
 
     $validPriorities = ['low', 'medium', 'high', 'urgent'];

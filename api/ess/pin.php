@@ -24,8 +24,8 @@ try {
     if (empty($currentPin)) {
         jsonOutput(['success' => false, 'error' => 'Current PIN is required'], 400);
     }
-    if (empty($newPin) || !preg_match('/^\d{4,10}$/', $newPin)) {
-        jsonOutput(['success' => false, 'error' => 'New PIN must be 4-10 digits'], 400);
+    if (empty($newPin) || !preg_match('/^\d{4}$/', $newPin)) {
+        jsonOutput(['success' => false, 'error' => 'New PIN must be exactly 4 digits'], 400);
     }
     if ($currentPin === $newPin) {
         jsonOutput(['success' => false, 'error' => 'New PIN must be different from current PIN'], 400);
@@ -67,7 +67,7 @@ try {
 
     // ─── Update PIN ───────────────────────────────────────────────────────
     $updateStmt = $conn->prepare('
-        UPDATE employees SET pin = ?, has_custom_pin = 1, updated_at = NOW() WHERE id = ?
+        UPDATE employees SET pin = ?, updated_at = NOW() WHERE id = ?
     ');
     $updateStmt->bind_param('si', $newPin, $intId);
     $updateStmt->execute();

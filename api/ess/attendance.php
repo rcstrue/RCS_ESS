@@ -200,9 +200,9 @@ function _handleCheckIn(): void
     $minute = (int)date('i');
     $isLate = $hour > 10 || ($hour === 10 && $minute > 0);
 
-    // CRITICAL: status = 'checked_in' so frontend can detect active check-in
-    // The late flag is tracked separately for monthly summary
-    $status = 'checked_in';
+    // CRITICAL: status = 'present' (or 'late' if after 10:00)
+    // Frontend detects active check-in by checking if check_out IS NULL
+    $status = $isLate ? 'late' : 'present';
 
     // Get location from input if provided
     // Accept both { latitude, longitude } and { location: "lat, lng" }
@@ -234,7 +234,7 @@ function _handleCheckIn(): void
         INSERT INTO ess_attendance (employee_id, date, check_in, status, latitude, longitude, note)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ');
-    $insertStmt->bind_param('sssssds',
+    $insertStmt->bind_param('sssssdd',
         $employeeId, $today, $currentTime, $status, $latitude, $longitude, $note
     );
     $insertStmt->execute();
@@ -307,15 +307,15 @@ function _handleCheckOut(): void
         ], 409);
     }
 
-    // CRITICAL: Set status to 'checked_out' so frontend knows the day is done
-    // Keep late flag if was late at check-in
-    $finalStatus = 'checked_out';
+    // Frontend detects check-out by checking if check_out is NOT NULL
+    // Keep whatever status was set at check-in (present/late)
+    // Clean up stale comments above
 
-    // Update with check_out time and final status
+    // Update with check_out time (keep existing status)
     $updateStmt = $conn->prepare('
-        UPDATE ess_attendance SET check_out = ?, status = ?, updated_at = NOW() WHERE id = ?
+        UPDATE ess_attendance SET check_out = ?, updated_at = NOW() WHERE id = ?
     ');
-    $updateStmt->bind_param('ssi', $currentTime, $finalStatus, $attendanceId);
+    $updateStmt->bind_param('si', $currentTime, $attendanceId);
     $updateStmt->execute();
     $updateStmt->close();
 
@@ -340,7 +340,7 @@ function _handleCheckOut(): void
             'date' => $record['date'],
             'check_in' => $record['check_in'],
             'check_out' => $currentTime,
-            'status' => $finalStatus,
+            'status' => $record['status'],
             'hours_worked' => $hoursWorked,
             'location' => $loc,
             'message' => 'Checked out successfully'

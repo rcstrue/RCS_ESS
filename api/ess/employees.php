@@ -70,7 +70,7 @@ try {
                     if (!empty($teamWhere)) {
                         $teamWhere .= ' OR ';
                     }
-                    $teamWhere .= 'e.city = ?';
+                    $teamWhere .= 'e.district = ?';
                     $teamTypes .= 's';
                     $teamParams[] = $cacheData['city'];
                 }
@@ -158,7 +158,7 @@ try {
             e.department,
             e.employee_code,
             e.profile_pic_url,
-            e.city AS emp_city,
+            e.district AS emp_city,
             e.state AS emp_state,
             e.date_of_joining,
             e.employee_role,

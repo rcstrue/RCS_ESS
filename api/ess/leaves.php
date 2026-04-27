@@ -170,12 +170,7 @@ function _handleApplyLeave(): void
     $conn = getDbConnection();
 
     // Validate required fields
-    $type = strtoupper(trim($input['type'] ?? ''));
-    $startDate = trim($input['start_date'] ?? '');
-    $endDate = trim($input['end_date'] ?? '');
-    $reason = trim($input['reason'] ?? '');
-
-    $validTypes = ['CL', 'SL', 'EL', 'WFH', 'COMP_OFF', 'LWP'];
+    $validTypes = ['CL', 'SL', 'EL', 'WFH', 'Comp_Off', 'LWP'];
 
     if (empty($type) || !in_array($type, $validTypes)) {
         jsonOutput(['success' => false, 'error' => 'Invalid leave type. Allowed: ' . implode(', ', $validTypes)], 400);
