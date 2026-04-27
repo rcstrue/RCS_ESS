@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import {
   Plus,
@@ -15,8 +15,6 @@ import {
   Check,
   X,
   Filter,
-  Upload,
-  FileText,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -48,7 +46,6 @@ import {
   approveExpense,
   fetchEmployees,
 } from '@/lib/ess-api';
-import { uploadBase64Image } from '@/lib/api/config';
 import type { Expense, Employee } from '@/lib/ess-types';
 import { EXPENSE_TYPES } from '@/lib/ess-types';
 
@@ -131,13 +128,9 @@ export function ExpensesPage({
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
   const [submitType, setSubmitType] = useState<string>('expense');
   const [submitAmount, setSubmitAmount] = useState('');
-  const [submitDate, setSubmitDate] = useState(todayISTString());
+  const [submitDate, setSubmitDate] = useState('');
   const [submitDescription, setSubmitDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [billFile, setBillFile] = useState<File | null>(null);
-  const [billPreview, setBillPreview] = useState<string | null>(null);
-  const [isUploadingBill, setIsUploadingBill] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Reject dialog
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
@@ -253,37 +246,12 @@ export function ExpensesPage({
 
     setIsSubmitting(true);
     try {
-      // Upload bill first if selected
-      let billUrl: string | undefined;
-      if (billFile) {
-        setIsUploadingBill(true);
-        try {
-          const reader = new FileReader();
-          const base64 = await new Promise<string>((resolve, reject) => {
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(billFile);
-          });
-          const uploadResult = await uploadBase64Image(base64, billFile.name, 'bills');
-          if (uploadResult.url) {
-            billUrl = uploadResult.url;
-          } else {
-            toast.error('Failed to upload bill. Proceeding without it.');
-          }
-        } catch {
-          toast.error('Bill upload failed. Proceeding without it.');
-        } finally {
-          setIsUploadingBill(false);
-        }
-      }
-
       const { error } = await createExpense({
         employee_id: employeeId,
         type: submitType as 'advance' | 'expense',
         amount,
         expense_date: submitDate,
         description: submitDescription.trim() || undefined,
-        bill_url: billUrl,
       });
 
       if (error) {
@@ -301,29 +269,11 @@ export function ExpensesPage({
     }
   };
 
-  const handleBillSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setBillFile(file);
-    const reader = new FileReader();
-    reader.onload = () => setBillPreview(reader.result as string);
-    reader.readAsDataURL(file);
-  };
-
-  const removeBill = () => {
-    setBillFile(null);
-    setBillPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
   const resetSubmitForm = () => {
     setSubmitType('expense');
     setSubmitAmount('');
-    setSubmitDate(todayISTString());
+    setSubmitDate('');
     setSubmitDescription('');
-    setBillFile(null);
-    setBillPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   // ── Approve expense ──
@@ -592,44 +542,6 @@ export function ExpensesPage({
                 maxLength={500}
               />
             </div>
-
-            {/* Bill Upload */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium">Bill Upload</label>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,.pdf"
-                className="hidden"
-                onChange={handleBillSelect}
-              />
-              {billPreview ? (
-                <div className="relative rounded-lg border overflow-hidden">
-                  {billPreview.startsWith('data:application/pdf') ? (
-                    <div className="flex items-center gap-2 p-3 bg-muted">
-                      <FileText className="h-5 w-5 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground truncate">{billFile?.name}</span>
-                    </div>
-                  ) : (
-                    <img src={billPreview} alt="Bill" className="w-full h-32 object-cover" />
-                  )}
-                  <button
-                    onClick={removeBill}
-                    className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/50 text-white flex items-center justify-center"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center justify-center gap-2 p-6 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary hover:bg-primary/5 transition-colors"
-                >
-                  <Upload className="h-5 w-5 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Tap to upload bill</span>
-                </button>
-              )}
-            </div>
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
@@ -645,12 +557,12 @@ export function ExpensesPage({
             </Button>
             <Button
               onClick={handleSubmitExpense}
-              disabled={isSubmitting || isUploadingBill || !submitType || !submitAmount || !submitDate}
+              disabled={isSubmitting || !submitType || !submitAmount || !submitDate}
             >
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  {isUploadingBill ? 'Uploading Bill...' : 'Submitting...'}
+                  Submitting...
                 </>
               ) : (
                 'Submit'

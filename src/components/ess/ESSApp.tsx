@@ -104,7 +104,6 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
 
   const navigate = useCallback((page: string) => {
     if (page === 'logout') { clearSession(); return; }
-    if (page === 'register') { window.location.hash = '/'; return; }
     setCurrentPage(page);
     setShowMoreMenu(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -208,7 +207,7 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
         {currentPage === 'settings' && <SettingsView employee={emp} onLogout={clearSession} />}
       </main>
 
-      <BottomNav currentPage={currentPage} showMoreMenu={showMoreMenu} setShowMoreMenu={setShowMoreMenu} onNavigate={navigate} role={role} />
+      <BottomNav currentPage={currentPage} showMoreMenu={showMoreMenu} setShowMoreMenu={setShowMoreMenu} onNavigate={navigate} />
     </div>
   );
 }

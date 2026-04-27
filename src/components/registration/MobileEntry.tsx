@@ -16,9 +16,6 @@ interface MobileEntryProps {
 export function MobileEntry({ onMobileSubmit, onLoginSubmit, checkMobileExists }: MobileEntryProps) {
   const [mobileNumber, setMobileNumber] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
-  const [dobDay, setDobDay] = useState('');
-  const [dobMonth, setDobMonth] = useState('');
-  const [dobYear, setDobYear] = useState('');
   const [isChecking, setIsChecking] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [showLoginForm, setShowLoginForm] = useState(false);
@@ -136,29 +133,10 @@ export function MobileEntry({ onMobileSubmit, onLoginSubmit, checkMobileExists }
     setIsLoggingIn(false);
   };
 
-  // Build YYYY-MM-DD from separate inputs
-  const buildDob = (d: string, m: string, y: string): string => {
-    if (d && m && y && d.length <= 2 && m.length <= 2 && y.length === 4) {
-      return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-    }
-    return '';
-  };
-
-  // Sync separate inputs → dateOfBirth
-  const handleDobChange = (day: string, month: string, year: string) => {
-    setDobDay(day);
-    setDobMonth(month);
-    setDobYear(year);
-    setDateOfBirth(buildDob(day, month, year));
-  };
-
   const handleBackToMobile = () => {
     setShowLoginForm(false);
     setShowProfileCapture(false);
     setDateOfBirth('');
-    setDobDay('');
-    setDobMonth('');
-    setDobYear('');
     setError('');
     setProfilePicUrl(null);
   };
@@ -311,48 +289,17 @@ export function MobileEntry({ onMobileSubmit, onLoginSubmit, checkMobileExists }
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
+                  <Label htmlFor="dob" className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-muted-foreground" />
                     Date of Birth (for verification)
                   </Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-medium text-muted-foreground uppercase">Day</span>
-                      <Input
-                        type="tel"
-                        inputMode="numeric"
-                        placeholder="DD"
-                        value={dobDay}
-                        onChange={(e) => handleDobChange(e.target.value.replace(/\D/g, '').slice(0, 2), dobMonth, dobYear)}
-                        className="h-12 text-center text-lg"
-                        maxLength={2}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-medium text-muted-foreground uppercase">Month</span>
-                      <Input
-                        type="tel"
-                        inputMode="numeric"
-                        placeholder="MM"
-                        value={dobMonth}
-                        onChange={(e) => handleDobChange(dobDay, e.target.value.replace(/\D/g, '').slice(0, 2), dobYear)}
-                        className="h-12 text-center text-lg"
-                        maxLength={2}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-medium text-muted-foreground uppercase">Year</span>
-                      <Input
-                        type="tel"
-                        inputMode="numeric"
-                        placeholder="YYYY"
-                        value={dobYear}
-                        onChange={(e) => handleDobChange(dobDay, dobMonth, e.target.value.replace(/\D/g, '').slice(0, 4))}
-                        className="h-12 text-center text-lg"
-                        maxLength={4}
-                      />
-                    </div>
-                  </div>
+                  <Input
+                    id="dob"
+                    type="date"
+                    value={dateOfBirth}
+                    onChange={(e) => setDateOfBirth(e.target.value)}
+                    className="h-12"
+                  />
                 </div>
 
                 {error && (

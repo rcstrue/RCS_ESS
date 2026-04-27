@@ -25,7 +25,6 @@ import {
   Timer,
   MapPin,
   Loader2,
-  UserPlus,
 } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════
@@ -83,7 +82,6 @@ export default function DashboardHome({
     { key: 'expenses', label: 'Expenses', icon: Receipt, color: 'text-amber-600', bg: 'bg-amber-50' },
     { key: 'announcements', label: 'Notices', icon: Megaphone, color: 'text-rose-600', bg: 'bg-rose-50' },
     { key: 'helpdesk', label: 'Help Desk', icon: CircleHelp, color: 'text-sky-600', bg: 'bg-sky-50' },
-    { key: 'register', label: 'Register', icon: UserPlus, color: 'text-teal-600', bg: 'bg-teal-50' },
   ];
 
   // Attendance helpers
@@ -95,44 +93,15 @@ export default function DashboardHome({
 
   const formatAttTime = (iso: string | undefined) => {
     if (!iso) return null;
-    // Handle time-only values from MySQL TIME column (HH:MM:SS or HH:MM)
-    const timeMatch = iso.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-    if (timeMatch) {
-      const h = parseInt(timeMatch[1]);
-      const m = parseInt(timeMatch[2]);
-      const period = h >= 12 ? 'PM' : 'AM';
-      const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-      return `${h12}:${String(m).padStart(2, '0')} ${period}`;
-    }
-    // Handle datetime strings
     const d = parseIST((iso || '').replace(' ', 'T'));
     return isNaN(d.getTime()) ? null : d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   };
   const calcHours = (cIn: string | undefined, cOut: string | undefined) => {
     if (!cIn) return null;
-    const timeInMatch = cIn.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-    let startMs: number;
-    if (timeInMatch) {
-      // Time-only: use today's date as base
-      const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-      startMs = new Date(ist.getFullYear(), ist.getMonth(), ist.getDate(), parseInt(timeInMatch[1]), parseInt(timeInMatch[2])).getTime();
-    } else {
-      startMs = parseIST(cIn.replace(' ', 'T')).getTime();
-    }
-    let endMs: number;
-    if (cOut) {
-      const timeOutMatch = cOut.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-      if (timeOutMatch) {
-        const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-        endMs = new Date(ist.getFullYear(), ist.getMonth(), ist.getDate(), parseInt(timeOutMatch[1]), parseInt(timeOutMatch[2])).getTime();
-      } else {
-        endMs = parseIST(cOut.replace(' ', 'T')).getTime();
-      }
-    } else {
-      endMs = Date.now();
-    }
-    if (!startMs || isNaN(startMs) || endMs < startMs) return null;
-    const diffMs = endMs - startMs;
+    const start = parseIST(cIn.replace(' ', 'T')).getTime();
+    const end = cOut ? parseIST(cOut.replace(' ', 'T')).getTime() : Date.now();
+    if (!start || end < start) return null;
+    const diffMs = end - start;
     const h = Math.floor(diffMs / 3600000);
     const m = Math.floor((diffMs % 3600000) / 60000);
     return `${h}h ${m}m`;
