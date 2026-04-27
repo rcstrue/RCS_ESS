@@ -1,8 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   fetchAttendance,
-  checkIn,
-  checkOut,
 } from '@/lib/ess-api';
 import type { AttendanceRecord } from '@/lib/ess-types';
 import { toast } from 'sonner';
@@ -11,16 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Separator } from '@/components/ui/separator';
 import {
-  LogIn,
-  LogOut,
-  Clock,
-  MapPin,
   ChevronLeft,
   ChevronRight,
   CalendarDays,
   Timer,
+  MapPin,
 } from 'lucide-react';
 
 // ─── Props ───────────────────────────────────────────────────────────
@@ -51,17 +45,6 @@ function formatTime(iso: string | undefined): string {
   const d = parseIST(iso);
   if (isNaN(d.getTime())) return '—';
   return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-}
-
-function formatDate(iso: string): string {
-  const d = parseIST(iso);
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString('en-IN', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
 }
 
 function calculateHours(checkIn: string | undefined, checkOut: string | undefined): string {
@@ -102,22 +85,6 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null);
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [checkInLoading, setCheckInLoading] = useState(false);
-  const [checkOutLoading, setCheckOutLoading] = useState(false);
-  const clockRef = useRef<ReturnType<typeof setInterval>>();
-
-  // Track the active attendance ID even across month navigations
-  // (user checks in one month, navigates to another, needs to check out)
-  const activeAttendanceRef = useRef<number | null>(null);
-
-  // Live clock
-  useEffect(() => {
-    clockRef.current = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => {
-      if (clockRef.current) clearInterval(clockRef.current);
-    };
-  }, []);
 
   // Fetch attendance records
   const loadAttendance = useCallback(async () => {
@@ -136,19 +103,6 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
       const todayStr = todayDateString();
       const today = items.find((r) => r.date === todayStr) ?? null;
       setTodayRecord(today);
-
-      // Maintain cross-month active attendance ref
-      if (today?.status === 'checked_in' && !today.check_out) {
-        activeAttendanceRef.current = today.id;
-      } else if (todayRecord && todayRecord?.status === 'checked_in' && !today.check_out) {
-        // Today's previous record was checked in — keep tracking
-      } else {
-        // Check if the active ref still has an active record in the current month
-        const activeRecord = items.find((r) => r.id === activeAttendanceRef.current);
-        if (!activeRecord || activeRecord.check_out) {
-          activeAttendanceRef.current = null;
-        }
-      }
     } catch {
       toast.error('Failed to load attendance data');
     } finally {
@@ -159,74 +113,6 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
   useEffect(() => {
     loadAttendance();
   }, [loadAttendance]);
-
-  // Geolocation helper
-  const requestGeolocation = (): Promise<string> => {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        resolve('Location unavailable');
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const { latitude, longitude } = pos.coords;
-          resolve(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
-        },
-        () => resolve('Location denied'),
-        { enableHighAccuracy: true, timeout: 10000 },
-      );
-    });
-  };
-
-  // Check In
-  const handleCheckIn = async () => {
-    try {
-      setCheckInLoading(true);
-      const location = await requestGeolocation();
-      const { data: checkInData, error: checkInError } = await checkIn({ employee_id: employeeId, location });
-      if (checkInError) {
-        toast.error(checkInError);
-        return;
-      }
-      // Save the attendance ID for cross-month check-out
-      if (checkInData?.id) {
-        activeAttendanceRef.current = checkInData.id;
-      }
-      toast.success('Checked in successfully!');
-      // Always reload attendance to get authoritative state
-      await loadAttendance();
-    } catch {
-      toast.error('Check-in failed. Please try again.');
-    } finally {
-      setCheckInLoading(false);
-    }
-  };
-
-  // Check Out
-  const handleCheckOut = async () => {
-    // Use the tracked active attendance ID (cross-month safe), fall back to todayRecord
-    const attendanceId = todayRecord?.id || activeAttendanceRef.current;
-    if (!attendanceId) {
-      toast.error('No active check-in found. Please check in first.');
-      return;
-    }
-    try {
-      setCheckOutLoading(true);
-      const { error: checkOutError } = await checkOut(attendanceId);
-      if (checkOutError) {
-        toast.error(checkOutError);
-        return;
-      }
-      activeAttendanceRef.current = null;
-      toast.success('Checked out successfully!');
-      // Always reload attendance to get authoritative state
-      await loadAttendance();
-    } catch {
-      toast.error('Check-out failed. Please try again.');
-    } finally {
-      setCheckOutLoading(false);
-    }
-  };
 
   // Month navigation
   const goToPrevMonth = () => {
@@ -249,83 +135,9 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
 
   const isTodayMonth = year === new Date().getFullYear() && month === new Date().getMonth();
 
-  const hasCheckedIn = todayRecord?.status === 'checked_in' || todayRecord?.status === 'checked_out';
-  const canCheckIn = !todayRecord || todayRecord.status === 'absent' || todayRecord.status === 'holiday' || todayRecord.status === 'leave';
-  const canCheckOut = todayRecord?.status === 'checked_in' || (activeAttendanceRef.current && !todayRecord?.check_out);
-
   // ─── Render ──────────────────────────────────────────────────────
   return (
     <div className="space-y-4 pb-6">
-      {/* ── Check In / Out Action Card ─────────────────────────── */}
-      <Card className="border-2">
-        <CardContent className="p-4 sm:p-6">
-          {/* Current time */}
-          <div className="text-center mb-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Time</p>
-            <p className="text-3xl sm:text-4xl font-bold tabular-nums tracking-tight">
-              {currentTime.toLocaleTimeString('en-IN', {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: true,
-              })}
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              {currentTime.toLocaleDateString('en-IN', {
-                weekday: 'long',
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric',
-              })}
-            </p>
-          </div>
-
-          <Separator className="my-4" />
-
-          {/* Action buttons */}
-          <div className="flex flex-col items-center gap-3">
-            {(canCheckIn || !hasCheckedIn) && !canCheckOut && (
-              <Button
-                size="xl"
-                className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white text-lg gap-2 shadow-lg shadow-emerald-200"
-                onClick={handleCheckIn}
-                disabled={checkInLoading}
-              >
-                {checkInLoading ? (
-                  <Clock className="h-5 w-5 animate-spin" />
-                ) : (
-                  <LogIn className="h-5 w-5" />
-                )}
-                {checkInLoading ? 'Checking In...' : 'Check In'}
-              </Button>
-            )}
-
-            {canCheckOut && (
-              <Button
-                size="xl"
-                className="w-full sm:w-auto bg-rose-600 hover:bg-rose-700 text-white text-lg gap-2 shadow-lg shadow-rose-200"
-                onClick={handleCheckOut}
-                disabled={checkOutLoading}
-              >
-                {checkOutLoading ? (
-                  <Clock className="h-5 w-5 animate-spin" />
-                ) : (
-                  <LogOut className="h-5 w-5" />
-                )}
-                {checkOutLoading ? 'Checking Out...' : 'Check Out'}
-              </Button>
-            )}
-
-            {hasCheckedIn && !canCheckOut && (
-              <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 px-4 py-2 rounded-lg">
-                <LogOut className="h-4 w-4" />
-                <span className="text-sm font-medium">You have checked out for today</span>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
       {/* ── Today's Status Card ─────────────────────────────────── */}
       <Card>
         <CardHeader className="pb-3">
@@ -343,34 +155,48 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
               <Skeleton className="h-16 rounded-lg" />
             </div>
           ) : todayRecord ? (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Check In</p>
-                <p className="text-lg font-semibold">{formatTime(todayRecord.check_in)}</p>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Check In</p>
+                  <p className="text-lg font-semibold">{formatTime(todayRecord.check_in)}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Check Out</p>
+                  <p className="text-lg font-semibold">{formatTime(todayRecord.check_out)}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Status</p>
+                  <Badge
+                    className={`mt-1 ${STATUS_CONFIG[todayRecord.status].badgeClass} ${STATUS_CONFIG[todayRecord.status].pulse ? 'animate-pulse' : ''}`}
+                    variant="outline"
+                  >
+                    {STATUS_CONFIG[todayRecord.status].label}
+                  </Badge>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Hours Worked</p>
+                  <p className="text-lg font-semibold">{calculateHours(todayRecord.check_in, todayRecord.check_out)}</p>
+                </div>
               </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Check Out</p>
-                <p className="text-lg font-semibold">{formatTime(todayRecord.check_out)}</p>
-              </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Status</p>
-                <Badge
-                  className={`mt-1 ${STATUS_CONFIG[todayRecord.status].badgeClass} ${STATUS_CONFIG[todayRecord.status].pulse ? 'animate-pulse' : ''}`}
-                  variant="outline"
-                >
-                  {STATUS_CONFIG[todayRecord.status].label}
-                </Badge>
-              </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Hours Worked</p>
-                <p className="text-lg font-semibold">{calculateHours(todayRecord.check_in, todayRecord.check_out)}</p>
-              </div>
+              {/* Location row */}
+              {todayRecord.location && (
+                <div className="flex items-center gap-2 px-1">
+                  <div className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 shrink-0">
+                    <MapPin className="w-3 h-3 text-emerald-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-gray-400">Location</p>
+                    <p className="text-xs font-medium text-gray-700 truncate">{todayRecord.location}</p>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-6 text-muted-foreground">
               <CalendarDays className="h-8 w-8 mx-auto mb-2 opacity-50" />
               <p className="text-sm">No attendance record for today</p>
-              <p className="text-xs mt-1">Tap "Check In" to mark your attendance</p>
+              <p className="text-xs mt-1">Go to Home page to check in</p>
             </div>
           )}
         </CardContent>

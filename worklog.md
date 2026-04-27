@@ -175,3 +175,26 @@ Stage Summary:
 - Deployment: dist/ + api/ deployed to ~/domains/join.rcsfacility.com/public_html/
 - .htaccess: SPA routing, cache-busting HTML, immutable hashed assets, CORS for API
 - Zero lint errors from ESS/API files
+
+---
+Task ID: 8
+Agent: Main Agent
+Task: Move check-in/out to home page only, show location, hide check-in after check-in
+
+Work Log:
+- Fixed PHP attendance.php: GET response now returns combined `location` field (from lat+lng columns). POST check-in now accepts both `{ latitude, longitude }` AND `{ location: "lat, lng" }` string format — parses location string into lat/lng for DB storage
+- Removed entire Check In/Out action card and live clock from AttendancePage.tsx — kept only Today's Status, Calendar, and Legend cards
+- Removed unused state (checkInLoading, checkOutLoading, currentTime, clockRef), unused handlers (handleCheckIn, handleCheckOut, requestGeolocation), unused imports (checkIn, checkOut, Separator, useRef)
+- Updated AttendancePage "no record" message: "Tap Check In to mark" → "Go to Home page to check in"
+- Added location display to AttendancePage Today's Status card (shows when available)
+- Enhanced DashboardHome location row: Always visible (not conditional), shows "Not captured" when no location data
+- Dashboard check-in/out button visibility already works correctly: Check In button hides when status=checked_in, Check Out button appears, "Done for today" when checked_out
+- Production build passes: 1801 modules, 0 errors
+
+Stage Summary:
+- 3 files modified: api/ess/attendance.php, src/components/ess/AttendancePage.tsx, src/components/ess/DashboardHome.tsx
+- Location was broken because PHP only read { latitude, longitude } but frontend sent { location: "lat, lng" } string — now both formats accepted
+- Check-in/out ONLY on Home page (dashboard), Attendance page shows history/calendar only
+- After check-in: green Check In button disappears, red Check Out button appears automatically
+- After check-out: Check Out button disappears, "Done for today" message shows
+- Location always visible on dashboard attendance card

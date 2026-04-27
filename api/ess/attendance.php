@@ -77,6 +77,11 @@ function _handleGetAttendance(): void
 
     $records = [];
     while ($row = $result->fetch_assoc()) {
+        // Build location string from lat/lng
+        $location = null;
+        if (!empty($row['latitude']) && !empty($row['longitude'])) {
+            $location = round((float)$row['latitude'], 4) . ', ' . round((float)$row['longitude'], 4);
+        }
         $records[] = [
             'id' => (int)$row['id'],
             'employee_id' => $row['employee_id'],
@@ -86,6 +91,7 @@ function _handleGetAttendance(): void
             'status' => $row['status'],
             'latitude' => $row['latitude'] ? (float)$row['latitude'] : null,
             'longitude' => $row['longitude'] ? (float)$row['longitude'] : null,
+            'location' => $location,
             'note' => $row['note'] ?? '',
             'created_at' => $row['created_at'],
             'updated_at' => $row['updated_at'],
@@ -183,9 +189,23 @@ function _handleCheckIn(): void
     }
 
     // Get location from input if provided
+    // Accept both { latitude, longitude } and { location: "lat, lng" }
     $latitude = isset($input['latitude']) ? (float)$input['latitude'] : null;
     $longitude = isset($input['longitude']) ? (float)$input['longitude'] : null;
+    if (!$latitude && !$longitude && !empty($input['location'])) {
+        $parts = explode(',', $input['location']);
+        if (count($parts) >= 2) {
+            $latitude = (float)trim($parts[0]);
+            $longitude = (float)trim($parts[1]);
+        }
+    }
     $note = trim($input['note'] ?? '');
+
+    // Build location string for response
+    $locationStr = null;
+    if ($latitude !== null && $longitude !== null) {
+        $locationStr = round($latitude, 4) . ', ' . round($longitude, 4);
+    }
 
     // Insert attendance record
     $insertStmt = $conn->prepare('
@@ -210,6 +230,7 @@ function _handleCheckIn(): void
             'status' => $status,
             'latitude' => $latitude,
             'longitude' => $longitude,
+            'location' => $locationStr,
             'message' => 'Checked in successfully'
         ]
     ]);
