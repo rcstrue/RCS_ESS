@@ -27,6 +27,10 @@ jobs:
       - name: Install lftp
         run: sudo apt-get update && sudo apt-get install -y lftp
 
+      # ─── Config ───
+      - name: Set FTP remote path
+        run: echo "REMOTE_BASE=domains/join.rcsfacility.com/public_html" >> $GITHUB_ENV
+
       - name: Deploy frontend via FTP
         run: |
           lftp -c "
@@ -35,7 +39,7 @@ jobs:
             set net:timeout 30;
             set net:max-retries 3;
             open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
-            cd public_html;
+            cd ${{ env.REMOTE_BASE }};
             lcd dist;
             mirror -R --no-symlinks --parallel=4 --no-perms --overwrite;
             quit
@@ -44,7 +48,6 @@ jobs:
 
       - name: Deploy API folder via FTP
         run: |
-          # Only deploy if api/ folder exists in repo
           if [ -d "api" ]; then
             lftp -c "
               set ftp:ssl-allow no;
@@ -52,7 +55,7 @@ jobs:
               set net:timeout 30;
               set net:max-retries 3;
               open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
-              cd public_html;
+              cd ${{ env.REMOTE_BASE }};
               lcd api;
               mirror -R --no-symlinks --parallel=4 --no-perms --overwrite;
               quit
@@ -62,9 +65,8 @@ jobs:
             echo "No api/ folder found in repo - skipping API deploy"
           fi
 
-      - name: Deploy .htaccess via FTP
+      - name: Deploy root .htaccess via FTP
         run: |
-          # Create a temporary deploy folder with .htaccess
           mkdir -p deploy_tmp
           cat > deploy_tmp/.htaccess << 'HTACCESS'
           # SPA fallback + cache control
@@ -91,17 +93,6 @@ jobs:
               <FilesMatch "\.(js|css)$">
                   Header set Cache-Control "public, max-age=31536000, immutable"
               </FilesMatch>
-              <FilesMatch "api/">
-                  Header set Cache-Control "no-store, no-cache, must-revalidate"
-                  Header set Access-Control-Allow-Origin "*"
-                  Header set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
-                  Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-API-KEY, X-Employee-ID"
-              </FilesMatch>
-          </IfModule>
-
-          # Gzip
-          <IfModule mod_deflate.c>
-              AddOutputFilterByType DEFLATE text/html text/css application/javascript application/json image/svg+xml
           </IfModule>
 
           # Security
@@ -118,31 +109,66 @@ jobs:
             set net:timeout 30;
             set net:max-retries 3;
             open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
-            cd public_html;
+            cd ${{ env.REMOTE_BASE }};
             lcd deploy_tmp;
             put .htaccess;
             quit
           "
           rm -rf deploy_tmp
-          echo ".htaccess deployed successfully"
+          echo "Root .htaccess deployed successfully"
 
-          # Deploy api .htaccess for clean URL routing
+      - name: Deploy api/ess .htaccess via FTP
+        run: |
           mkdir -p deploy_api_ess
           cat > deploy_api_ess/.htaccess << 'HTACCESS'
+          # RCS ESS API - Fixed & Production Safe
           RewriteEngine On
-          RewriteCond %{REQUEST_FILENAME} !-f
-          RewriteCond %{REQUEST_FILENAME} !-d
-          RewriteRule ^(.*)$ $1.php [QSA,L]
 
+          # CORS HEADERS
           <IfModule mod_headers.c>
-              Header set Access-Control-Allow-Origin "*"
-              Header set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
-              Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-API-KEY, X-Employee-ID"
+              Header always set Access-Control-Allow-Origin "*"
+              Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+              Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-API-KEY, X-Employee-ID"
+              Header always set Access-Control-Max-Age "86400"
           </IfModule>
 
-          <IfModule mod_expires.c>
-              ExpiresActive On
-              ExpiresByType application/json "access plus 0 seconds"
+          # HANDLE PREFLIGHT OPTIONS - Return empty 200 immediately
+          <IfModule mod_rewrite.c>
+              RewriteCond %{REQUEST_METHOD} ^OPTIONS$
+              RewriteRule ^ - [R=200,L]
+          </IfModule>
+
+          # ROUTE CLEAN URLS → PHP FILES
+          RewriteCond %{REQUEST_FILENAME} !-f
+          RewriteCond %{REQUEST_FILENAME} !-d
+          RewriteRule ^([a-zA-Z0-9_-]+)$ $1.php [L]
+
+          # BLOCK DIRECT CONFIG ACCESS
+          <FilesMatch "config\.php$">
+              <IfModule mod_authz_core.c>
+                  Require all denied
+              </IfModule>
+              <IfModule !mod_authz_core.c>
+                  Order allow,deny
+                  Deny from all
+              </IfModule>
+          </FilesMatch>
+
+          # BLOCK DOTFILES
+          <FilesMatch "^\.">
+              <IfModule mod_authz_core.c>
+                  Require all denied
+              </IfModule>
+              <IfModule !mod_authz_core.c>
+                  Order allow,deny
+                  Deny from all
+              </IfModule>
+          </FilesMatch>
+
+          # NO-CACHE FOR API RESPONSES
+          <IfModule mod_headers.c>
+              Header always set Cache-Control "no-store, no-cache, must-revalidate"
+              Header always set Pragma "no-cache"
           </IfModule>
           HTACCESS
 
@@ -152,7 +178,7 @@ jobs:
             set net:timeout 30;
             set net:max-retries 3;
             open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
-            cd public_html/api/ess;
+            cd ${{ env.REMOTE_BASE }}/api/ess;
             lcd deploy_api_ess;
             put .htaccess;
             quit
