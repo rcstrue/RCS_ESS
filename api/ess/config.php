@@ -4,6 +4,8 @@ declare(strict_types=1);
 /**
  * ESS API — Shared Configuration & Utilities
  * Employee Self Service application backend
+ * 
+ * PRODUCTION CONFIG: Suppress ALL HTML errors, only output JSON
  */
 
 // ─── Database Constants ───────────────────────────────────────────────────────
@@ -19,8 +21,28 @@ define('JWT_SECRET', 'rcs_ess_jwt_secret_key_2024_bolt_hrms');
 // ─── Timezone ─────────────────────────────────────────────────────────────────
 date_default_timezone_set('Asia/Kolkata');
 
+// ─── ERROR HANDLING — CRITICAL FOR PRODUCTION ────────────────────────────────
+// Log all errors to PHP error log, display NOTHING to browser
+ini_set('display_errors', '0');
+ini_set('display_startup_errors', '0');
+error_reporting(E_ALL);
+// Custom error handler to ensure errors go to log, never to output
+set_error_handler(function (int $severity, string $message, string $file, int $line): bool {
+    error_log("ESS API [{$severity}] {$message} in {$file}:{$line}");
+    return true; // Prevent PHP default error output
+});
+// Custom exception handler for uncaught exceptions
+set_exception_handler(function (Throwable $e): void {
+    error_log("ESS API UNCAUGHT: {$e->getMessage()} in {$e->getFile()}:{$e->getLine()}");
+    http_response_code(500);
+    header('Content-Type: application/json');
+    echo json_encode(['success' => false, 'error' => 'Internal server error']);
+    exit;
+});
+
 // ─── CORS Headers ─────────────────────────────────────────────────────────────
 header('Content-Type: application/json');
+header('X-Content-Type-Options: nosniff');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-API-KEY');
@@ -56,6 +78,17 @@ function getInput(): array
     return $data;
 }
 
+// ─── Debug Logging ────────────────────────────────────────────────────────────
+/**
+ * Safe debug logging — writes to PHP error log, never outputs to browser
+ */
+function essLog(string $message): void
+{
+    $requestUri = $_SERVER['REQUEST_URI'] ?? '/';
+    $method = $_SERVER['REQUEST_METHOD'] ?? '?';
+    error_log("ESS [{$method} {$requestUri}] {$message}");
+}
+
 // ─── Get Bearer Token ─────────────────────────────────────────────────────────
 /**
  * Extract Bearer token from Authorization header
@@ -77,6 +110,7 @@ function validateApiKey(): bool
 {
     $key = $_SERVER['HTTP_X_API_KEY'] ?? '';
     if ($key !== API_KEY) {
+        essLog('Invalid API key attempt');
         jsonOutput(['success' => false, 'error' => 'Invalid API key'], 403);
         return false;
     }
@@ -172,6 +206,7 @@ function requireAuth(): string
 
     $payload = SimpleJWT::decode($token);
     if (!$payload) {
+        essLog('Invalid or expired JWT token');
         jsonOutput(['success' => false, 'error' => 'Invalid or expired token'], 401);
     }
 
@@ -180,7 +215,7 @@ function requireAuth(): string
 
 // ─── Database Connection ──────────────────────────────────────────────────────
 /**
- * Create and return a mysqli connection
+ * Create and return a mysqli connection with strict error mode
  */
 function getDbConnection(): mysqli
 {

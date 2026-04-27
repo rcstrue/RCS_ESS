@@ -22,7 +22,8 @@ try {
         default:
             jsonOutput(['success' => false, 'error' => 'Method not allowed'], 405);
     }
-} catch (Exception $e) {
+} catch (Throwable $e) {
+    essLog('FATAL announcements: ' . $e->getMessage());
     jsonOutput(['success' => false, 'error' => 'Internal server error'], 500);
 }
 
@@ -37,10 +38,10 @@ function _handleGetAnnouncements(): void
     $priorityFilter = $_GET['priority'] ?? '';
     [$page, $limit, $offset] = getPaginationParams();
 
-    // Build where clause
+    // Build where clause with a. prefix for JOIN safety
     // Always show announcements targeted to 'all'
     // Plus announcements matching employee's unit, city, region from cache
-    $where = 'WHERE (target_scope = ?';
+    $where = 'WHERE (a.target_scope = ?';
     $types = 's';
     $params = ['all'];
 
@@ -56,21 +57,21 @@ function _handleGetAnnouncements(): void
     if ($cache) {
         // Unit-scoped announcements
         if (!empty($cache['unit_id'])) {
-            $where .= ' OR (target_scope = ? AND target_id = ?)';
+            $where .= ' OR (a.target_scope = ? AND a.target_id = ?)';
             $types .= 'si';
             $params[] = 'unit';
             $params[] = (int)$cache['unit_id'];
         }
         // City-scoped announcements
         if (!empty($cache['city'])) {
-            $where .= ' OR (target_scope = ? AND target_id = ?)';
+            $where .= ' OR (a.target_scope = ? AND a.target_id = ?)';
             $types .= 'ss';
             $params[] = 'city';
             $params[] = $cache['city'];
         }
         // Region (state)-scoped announcements
         if (!empty($cache['state'])) {
-            $where .= ' OR (target_scope = ? AND target_id = ?)';
+            $where .= ' OR (a.target_scope = ? AND a.target_id = ?)';
             $types .= 'ss';
             $params[] = 'region';
             $params[] = $cache['state'];
@@ -81,19 +82,19 @@ function _handleGetAnnouncements(): void
 
     // Apply optional filters
     if (!empty($scopeFilter)) {
-        $where .= ' AND target_scope = ?';
+        $where .= ' AND a.target_scope = ?';
         $types .= 's';
         $params[] = $scopeFilter;
     }
 
     if (!empty($priorityFilter)) {
-        $where .= ' AND priority = ?';
+        $where .= ' AND a.priority = ?';
         $types .= 's';
         $params[] = $priorityFilter;
     }
 
-    // Count
-    $countStmt = $conn->prepare("SELECT COUNT(*) AS total FROM ess_announcements {$where}");
+    // Count query needs a. alias too
+    $countStmt = $conn->prepare("SELECT COUNT(*) AS total FROM ess_announcements a {$where}");
     $countStmt->bind_param($types, ...$params);
     $countStmt->execute();
     $total = (int)$countStmt->get_result()->fetch_assoc()['total'];

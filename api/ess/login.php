@@ -18,6 +18,8 @@ try {
     $mobile = trim($input['mobile_number'] ?? '');
     $pin = trim($input['pin'] ?? '');
 
+    essLog("Login attempt: mobile=" . substr($mobile, 0, 4) . "****");
+
     // ─── Input Validation ─────────────────────────────────────────────────
     if (empty($mobile)) {
         jsonOutput(['success' => false, 'error' => 'Mobile number is required'], 400);
@@ -44,6 +46,7 @@ try {
 
     if ($rateData['attempts'] >= 5) {
         $retryAfter = 60 - (time() - $rateData['last_attempt']);
+        essLog("Rate limited: mobile=" . substr($mobile, 0, 4) . "****, attempts={$rateData['attempts']}");
         jsonOutput([
             'success' => false,
             'error' => 'Too many login attempts. Please try again later.',
@@ -55,8 +58,16 @@ try {
     $conn = getDbConnection();
 
     // Find employee by mobile number with approved status
+    // CRITICAL: Use explicit column list instead of e.* to avoid ambiguity with JOINs
     $stmt = $conn->prepare('
-        SELECT e.*, c.name AS client_name, c.client_code, u.name AS unit_name
+        SELECT
+            e.id, e.full_name, e.mobile_number, e.email, e.designation, e.department,
+            e.city, e.state, e.date_of_joining, e.date_of_birth, e.gender,
+            e.employee_code, e.profile_pic_url, e.pin, e.has_custom_pin,
+            e.employee_role, e.app_role, e.worker_category,
+            e.client_id, e.unit_id, e.status,
+            c.name AS client_name, c.client_code,
+            u.name AS unit_name
         FROM employees e
         LEFT JOIN clients c ON c.id = e.client_id
         LEFT JOIN units u ON u.id = e.unit_id
@@ -71,6 +82,7 @@ try {
 
     if (!$employee) {
         _trackFailedAttempt($rateFile, $rateData);
+        essLog("Login failed: mobile not found");
         jsonOutput(['success' => false, 'error' => 'Invalid mobile number or PIN'], 401);
     }
 
@@ -93,6 +105,7 @@ try {
 
     if (!$validPin) {
         _trackFailedAttempt($rateFile, $rateData);
+        essLog("Login failed: wrong PIN, emp={$employee['id']}");
         jsonOutput(['success' => false, 'error' => 'Invalid mobile number or PIN'], 401);
     }
 
@@ -173,6 +186,8 @@ try {
         'date_of_joining' => $employee['date_of_joining'] ?? '',
     ];
 
+    essLog("Login success: emp={$employeeId}, role={$role}");
+
     jsonOutput([
         'success' => true,
         'data' => [
@@ -182,7 +197,8 @@ try {
         ]
     ]);
 
-} catch (Exception $e) {
+} catch (Throwable $e) {
+    essLog("FATAL login: {$e->getMessage()}");
     jsonOutput(['success' => false, 'error' => 'Internal server error'], 500);
 }
 

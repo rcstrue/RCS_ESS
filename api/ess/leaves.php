@@ -26,7 +26,8 @@ try {
         default:
             jsonOutput(['success' => false, 'error' => 'Method not allowed'], 405);
     }
-} catch (Exception $e) {
+} catch (Throwable $e) {
+    essLog('FATAL leaves: ' . $e->getMessage());
     jsonOutput(['success' => false, 'error' => 'Internal server error'], 500);
 }
 
@@ -49,6 +50,8 @@ function _handleGetLeaves(): void
     $typeFilter = $_GET['type'] ?? '';
     $yearFilter = $_GET['year'] ?? '';
     [$page, $limit, $offset] = getPaginationParams();
+
+    essLog('GET leaves: emp=' . $queryEmployeeId . ', status=' . $statusFilter);
 
     // Build query
     $where = 'WHERE employee_id = ?';
@@ -204,7 +207,7 @@ function _handleApplyLeave(): void
             (start_date <= ? AND end_date >= ?)
         )
     ');
-    $overlapStmt->bind_param('ssssss', $employeeId, $startDate, $startDate, $endDate, $endDate);
+    $overlapStmt->bind_param('sssss', $employeeId, $startDate, $startDate, $endDate, $endDate);
     $overlapStmt->execute();
     if ($overlapStmt->get_result()->num_rows > 0) {
         $overlapStmt->close();

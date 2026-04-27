@@ -86,6 +86,7 @@ try {
         ]
     ]);
 
-} catch (Exception $e) {
+} catch (Throwable $e) {
+    essLog('FATAL pin: ' . $e->getMessage());
     jsonOutput(['success' => false, 'error' => 'Internal server error'], 500);
 }

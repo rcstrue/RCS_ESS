@@ -12,6 +12,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 
 try {
     validateApiKey();
+    essLog("Request: method={$method}");
 
     switch ($method) {
         case 'GET':
@@ -26,7 +27,8 @@ try {
         default:
             jsonOutput(['success' => false, 'error' => 'Method not allowed'], 405);
     }
-} catch (Exception $e) {
+} catch (Throwable $e) {
+    essLog("FATAL: {$e->getMessage()} in {$e->getFile()}:{$e->getLine()}");
     jsonOutput(['success' => false, 'error' => 'Internal server error'], 500);
 }
 
@@ -50,6 +52,8 @@ function _handleGetAttendance(): void
     // Month range
     $startDate = $month . '-01';
     $endDate = $month . '-31';
+
+    essLog("GET attendance: emp={$queryEmployeeId}, month={$month}, page={$page}");
 
     // Get total count
     $countStmt = $conn->prepare('
@@ -120,13 +124,14 @@ function _getAttendanceSummary(mysqli $conn, string $employeeId, string $startDa
     $stmt = $conn->prepare('
         SELECT
             COUNT(*) AS total_days,
-            SUM(CASE WHEN status IN (\'present\', \'late\', \'half_day\') THEN 1 ELSE 0 END) AS total_present,
-            SUM(CASE WHEN status = \'absent\' THEN 1 ELSE 0 END) AS total_absent,
-            SUM(CASE WHEN status = \'leave\' THEN 1 ELSE 0 END) AS total_leave,
-            SUM(CASE WHEN status = \'holiday\' THEN 1 ELSE 0 END) AS total_holiday,
-            SUM(CASE WHEN status = \'late\' THEN 1 ELSE 0 END) AS total_late
-        FROM ess_attendance
-        WHERE employee_id = ? AND date BETWEEN ? AND ?
+            SUM(CASE WHEN a.status IN (\'present\', \'late\', \'half_day\', \'checked_out\') THEN 1 ELSE 0 END) AS total_present,
+            SUM(CASE WHEN a.status = \'checked_in\' THEN 1 ELSE 0 END) AS total_checked_in,
+            SUM(CASE WHEN a.status = \'absent\' THEN 1 ELSE 0 END) AS total_absent,
+            SUM(CASE WHEN a.status = \'leave\' THEN 1 ELSE 0 END) AS total_leave,
+            SUM(CASE WHEN a.status = \'holiday\' THEN 1 ELSE 0 END) AS total_holiday,
+            SUM(CASE WHEN a.status = \'late\' THEN 1 ELSE 0 END) AS total_late
+        FROM ess_attendance a
+        WHERE a.employee_id = ? AND a.date BETWEEN ? AND ?
     ');
     $stmt->bind_param('sss', $employeeId, $startDate, $endDate);
     $stmt->execute();
@@ -136,6 +141,7 @@ function _getAttendanceSummary(mysqli $conn, string $employeeId, string $startDa
     return [
         'total_days' => (int)($row['total_days'] ?? 0),
         'total_present' => (int)($row['total_present'] ?? 0),
+        'total_checked_in' => (int)($row['total_checked_in'] ?? 0),
         'total_absent' => (int)($row['total_absent'] ?? 0),
         'total_leave' => (int)($row['total_leave'] ?? 0),
         'total_holiday' => (int)($row['total_holiday'] ?? 0),
@@ -154,11 +160,13 @@ function _handleCheckIn(): void
     $today = date('Y-m-d');
     $currentTime = date('H:i:s');
 
+    essLog("CHECK IN attempt: emp={$employeeId}, today={$today}");
+
     // Check if already checked in today
     $checkStmt = $conn->prepare('
-        SELECT id, check_in, check_out, status FROM ess_attendance
-        WHERE employee_id = ? AND date = ?
-        ORDER BY check_in DESC LIMIT 1
+        SELECT a.id, a.check_in, a.check_out, a.status FROM ess_attendance a
+        WHERE a.employee_id = ? AND a.date = ?
+        ORDER BY a.check_in DESC LIMIT 1
     ');
     $checkStmt->bind_param('ss', $employeeId, $today);
     $checkStmt->execute();
@@ -166,7 +174,13 @@ function _handleCheckIn(): void
     $checkStmt->close();
 
     if ($existing) {
+        essLog("Already checked in: att_id={$existing['id']}, status={$existing['status']}");
         // Return existing record — already checked in
+        // Build location string for response
+        $loc = null;
+        if (!empty($existing['latitude']) && !empty($existing['longitude'])) {
+            $loc = round((float)$existing['latitude'], 4) . ', ' . round((float)$existing['longitude'], 4);
+        }
         jsonOutput([
             'success' => false,
             'error' => 'Already checked in today',
@@ -176,23 +190,31 @@ function _handleCheckIn(): void
                 'check_in' => $existing['check_in'],
                 'check_out' => $existing['check_out'],
                 'status' => $existing['status'],
+                'location' => $loc,
             ]
         ], 409);
     }
 
-    // Determine status based on check-in time (after 10:00 AM = late)
-    $status = 'present';
+    // Determine base status: check-in time > 10:00 = late
     $hour = (int)date('H');
     $minute = (int)date('i');
-    if ($hour > 10 || ($hour === 10 && $minute > 0)) {
-        $status = 'late';
-    }
+    $isLate = $hour > 10 || ($hour === 10 && $minute > 0);
+
+    // CRITICAL: status = 'checked_in' so frontend can detect active check-in
+    // The late flag is tracked separately for monthly summary
+    $status = 'checked_in';
 
     // Get location from input if provided
     // Accept both { latitude, longitude } and { location: "lat, lng" }
-    $latitude = isset($input['latitude']) ? (float)$input['latitude'] : null;
-    $longitude = isset($input['longitude']) ? (float)$input['longitude'] : null;
-    if (!$latitude && !$longitude && !empty($input['location'])) {
+    $latitude = null;
+    $longitude = null;
+    if (isset($input['latitude']) && $input['latitude'] !== null) {
+        $latitude = (float)$input['latitude'];
+    }
+    if (isset($input['longitude']) && $input['longitude'] !== null) {
+        $longitude = (float)$input['longitude'];
+    }
+    if ($latitude === null && $longitude === null && !empty($input['location'])) {
         $parts = explode(',', $input['location']);
         if (count($parts) >= 2) {
             $latitude = (float)trim($parts[0]);
@@ -219,6 +241,8 @@ function _handleCheckIn(): void
     $newId = $insertStmt->insert_id;
     $insertStmt->close();
 
+    essLog("CHECK IN success: att_id={$newId}, time={$currentTime}, late=" . ($isLate ? 'yes' : 'no') . ", location=" . ($locationStr ?? 'none'));
+
     jsonOutput([
         'success' => true,
         'data' => [
@@ -228,6 +252,7 @@ function _handleCheckIn(): void
             'check_in' => $currentTime,
             'check_out' => null,
             'status' => $status,
+            'is_late' => $isLate,
             'latitude' => $latitude,
             'longitude' => $longitude,
             'location' => $locationStr,
@@ -251,10 +276,12 @@ function _handleCheckOut(): void
 
     $currentTime = date('H:i:s');
 
+    essLog("CHECK OUT attempt: emp={$employeeId}, att_id={$attendanceId}");
+
     // Verify the record belongs to this employee and doesn't have check_out yet
     $checkStmt = $conn->prepare('
-        SELECT id, employee_id, date, check_in, check_out, status
-        FROM ess_attendance WHERE id = ? AND employee_id = ?
+        SELECT a.id, a.employee_id, a.date, a.check_in, a.check_out, a.status, a.latitude, a.longitude
+        FROM ess_attendance a WHERE a.id = ? AND a.employee_id = ?
     ');
     $checkStmt->bind_param('is', $attendanceId, $employeeId);
     $checkStmt->execute();
@@ -262,10 +289,12 @@ function _handleCheckOut(): void
     $checkStmt->close();
 
     if (!$record) {
+        essLog("CHECK OUT failed: att_id={$attendanceId} not found for emp={$employeeId}");
         jsonOutput(['success' => false, 'error' => 'Attendance record not found'], 404);
     }
 
     if (!empty($record['check_out'])) {
+        essLog("CHECK OUT failed: already checked out, att_id={$attendanceId}");
         jsonOutput([
             'success' => false,
             'error' => 'Already checked out for this record',
@@ -278,11 +307,15 @@ function _handleCheckOut(): void
         ], 409);
     }
 
-    // Update with check_out time
+    // CRITICAL: Set status to 'checked_out' so frontend knows the day is done
+    // Keep late flag if was late at check-in
+    $finalStatus = 'checked_out';
+
+    // Update with check_out time and final status
     $updateStmt = $conn->prepare('
-        UPDATE ess_attendance SET check_out = ?, updated_at = NOW() WHERE id = ?
+        UPDATE ess_attendance SET check_out = ?, status = ?, updated_at = NOW() WHERE id = ?
     ');
-    $updateStmt->bind_param('si', $currentTime, $attendanceId);
+    $updateStmt->bind_param('ssi', $currentTime, $finalStatus, $attendanceId);
     $updateStmt->execute();
     $updateStmt->close();
 
@@ -290,6 +323,14 @@ function _handleCheckOut(): void
     $checkIn = strtotime($record['check_in']);
     $checkOut = strtotime($currentTime);
     $hoursWorked = round(($checkOut - $checkIn) / 3600, 2);
+
+    // Build location string
+    $loc = null;
+    if (!empty($record['latitude']) && !empty($record['longitude'])) {
+        $loc = round((float)$record['latitude'], 4) . ', ' . round((float)$record['longitude'], 4);
+    }
+
+    essLog("CHECK OUT success: att_id={$attendanceId}, hours={$hoursWorked}");
 
     jsonOutput([
         'success' => true,
@@ -299,8 +340,9 @@ function _handleCheckOut(): void
             'date' => $record['date'],
             'check_in' => $record['check_in'],
             'check_out' => $currentTime,
+            'status' => $finalStatus,
             'hours_worked' => $hoursWorked,
-            'status' => $record['status'],
+            'location' => $loc,
             'message' => 'Checked out successfully'
         ]
     ]);

@@ -26,7 +26,8 @@ try {
         default:
             jsonOutput(['success' => false, 'error' => 'Method not allowed'], 405);
     }
-} catch (Exception $e) {
+} catch (Throwable $e) {
+    essLog('FATAL tasks: ' . $e->getMessage());
     jsonOutput(['success' => false, 'error' => 'Internal server error'], 500);
 }
 
@@ -44,36 +45,38 @@ function _handleGetTasks(): void
     [$page, $limit, $offset] = getPaginationParams();
 
     // Build where clause — always filter so user sees relevant tasks
-    $where = 'WHERE (assigned_to = ? OR assigned_by = ?)';
+    // Use t. prefix since data query JOINs ess_employee_cache
+    $where = 'WHERE (t.assigned_to = ? OR t.assigned_by = ?)';
     $types = 'ss';
     $params = [$authId, $authId];
 
     if (!empty($assignedTo)) {
-        $where .= ' AND assigned_to = ?';
+        $where .= ' AND t.assigned_to = ?';
         $types .= 's';
         $params[] = $assignedTo;
     }
 
     if (!empty($assignedBy)) {
-        $where .= ' AND assigned_by = ?';
+        $where .= ' AND t.assigned_by = ?';
         $types .= 's';
         $params[] = $assignedBy;
     }
 
     if (!empty($statusFilter)) {
-        $where .= ' AND status = ?';
+        $where .= ' AND t.status = ?';
         $types .= 's';
         $params[] = $statusFilter;
     }
 
     if (!empty($priorityFilter)) {
-        $where .= ' AND priority = ?';
+        $where .= ' AND t.priority = ?';
         $types .= 's';
         $params[] = $priorityFilter;
     }
 
-    // Count
-    $countStmt = $conn->prepare("SELECT COUNT(*) AS total FROM ess_tasks {$where}");
+    // Count query uses t alias
+    $countQuery = "SELECT COUNT(*) AS total FROM ess_tasks t {$where}";
+    $countStmt = $conn->prepare($countQuery);
     $countStmt->bind_param($types, ...$params);
     $countStmt->execute();
     $total = (int)$countStmt->get_result()->fetch_assoc()['total'];

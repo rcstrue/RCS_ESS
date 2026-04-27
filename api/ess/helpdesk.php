@@ -26,7 +26,8 @@ try {
         default:
             jsonOutput(['success' => false, 'error' => 'Method not allowed'], 405);
     }
-} catch (Exception $e) {
+} catch (Throwable $e) {
+    essLog('FATAL helpdesk: ' . $e->getMessage());
     jsonOutput(['success' => false, 'error' => 'Internal server error'], 500);
 }
 

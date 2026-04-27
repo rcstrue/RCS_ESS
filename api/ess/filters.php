@@ -39,7 +39,8 @@ try {
         default:
             jsonOutput(['success' => false, 'error' => 'Invalid view parameter'], 400);
     }
-} catch (Exception $e) {
+} catch (Throwable $e) {
+    essLog('FATAL filters: ' . $e->getMessage());
     jsonOutput(['success' => false, 'error' => 'Internal server error'], 500);
 }
 
