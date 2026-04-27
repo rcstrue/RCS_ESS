@@ -198,8 +198,16 @@ try {
     ]);
 
 } catch (Throwable $e) {
-    essLog("FATAL login: {$e->getMessage()}");
-    jsonOutput(['success' => false, 'error' => 'Internal server error'], 500);
+    essLog("FATAL login: {$e->getMessage()} in {$e->getFile()}:{$e->getLine()}");
+    jsonOutput([
+        'success' => false,
+        'error' => 'Internal server error',
+        '_debug' => [
+            'message' => $e->getMessage(),
+            'file' => basename($e->getFile()),
+            'line' => $e->getLine(),
+        ]
+    ], 500);
 }
 
 // ─── Helper Functions ─────────────────────────────────────────────────────────
