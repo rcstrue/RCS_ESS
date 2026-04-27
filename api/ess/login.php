@@ -58,11 +58,12 @@ try {
     $conn = getDbConnection();
 
     // Find employee by mobile number with approved status
-    // CRITICAL: Use explicit column list instead of e.* to avoid ambiguity with JOINs
+    // CRITICAL: Use explicit column list to avoid ambiguity with JOINs
+    // NOTE: Only use columns that actually exist in the employees table
     $stmt = $conn->prepare('
         SELECT
             e.id, e.full_name, e.mobile_number, e.email, e.designation, e.department,
-            e.city, e.state, e.date_of_joining, e.date_of_birth, e.gender,
+            e.state, e.date_of_joining, e.date_of_birth, e.gender,
             e.employee_code, e.profile_pic_url, e.pin, e.has_custom_pin,
             e.employee_role, e.app_role, e.worker_category,
             e.client_id, e.unit_id, e.status,
@@ -141,7 +142,7 @@ try {
 
     $unitName = $employee['unit_name'] ?? '';
     $clientName = $employee['client_name'] ?? '';
-    $city = $employee['city'] ?? '';
+    $city = '';
     $state = $employee['state'] ?? '';
     $profilePicUrl = $employee['profile_pic_url'] ?? '';
     $designation = $employee['designation'] ?? '';
@@ -179,7 +180,6 @@ try {
         'role' => $role,
         'has_custom_pin' => $hasCustomPin,
         'profile_pic_url' => $profilePicUrl,
-        'city' => $city,
         'state' => $state,
         'unit_name' => $unitName,
         'client_name' => $clientName,
