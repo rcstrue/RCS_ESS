@@ -57,26 +57,23 @@ try {
     // ─── Database Lookup ──────────────────────────────────────────────────
     $conn = getDbConnection();
 
-    // Find employee by mobile number with approved status
-    // ONLY select columns confirmed to exist in the employees table.
-    // Confirmed via pin.php: pin, date_of_birth, id, status
-    // Others: add back one-by-one after verifying schema
+    // Find employee by mobile number with is_active = 1
+    // Schema matches auth-reference.php (the original working code)
     $stmt = $conn->prepare('
         SELECT
             e.id, e.full_name, e.mobile_number, e.email, e.designation, e.department,
-            e.state, e.date_of_joining, e.date_of_birth,
-            e.employee_code, e.profile_pic_url, e.pin,
-            e.employee_role, e.app_role, e.worker_category,
+            e.city, e.state, e.date_of_joining, e.date_of_birth,
+            e.employee_code, e.profile_pic_url, e.pin_hash, e.has_custom_pin,
+            e.employee_role, e.worker_category,
             e.client_id, e.unit_id, e.status,
             c.name AS client_name, c.client_code,
             u.name AS unit_name
         FROM employees e
         LEFT JOIN clients c ON c.id = e.client_id
         LEFT JOIN units u ON u.id = e.unit_id
-        WHERE e.mobile_number = ? AND e.status = ?
+        WHERE e.mobile_number = ? AND e.is_active = 1
     ');
-    $approvedStatus = 'approved';
-    $stmt->bind_param('ss', $mobile, $approvedStatus);
+    $stmt->bind_param('s', $mobile);
     $stmt->execute();
     $result = $stmt->get_result();
     $employee = $result->fetch_assoc();
@@ -89,12 +86,13 @@ try {
     }
 
     // ─── PIN Validation ───────────────────────────────────────────────────
-    $storedPin = $employee['pin'];
     $validPin = false;
 
-    // Check stored PIN first
-    if (!empty($storedPin) && $storedPin === $pin) {
-        $validPin = true;
+    // Check stored pin_hash using password_verify
+    if (!empty($employee['pin_hash'])) {
+        if (password_verify($pin, $employee['pin_hash'])) {
+            $validPin = true;
+        }
     }
 
     // Fallback: check if PIN matches last 4 digits of birth year
@@ -116,7 +114,7 @@ try {
 
     // ─── Update Employee Cache ────────────────────────────────────────────
     $employeeId = (string)$employee['id'];
-    $hasCustomPin = 0; // column removed from SELECT — not in employees table
+    $hasCustomPin = ($employee['has_custom_pin'] ?? 0) == 1 ? 1 : 0;
 
     // Upsert into ess_employee_cache
     $cacheStmt = $conn->prepare('
@@ -143,18 +141,19 @@ try {
 
     $unitName = $employee['unit_name'] ?? '';
     $clientName = $employee['client_name'] ?? '';
-    $city = '';
+    $city = $employee['city'] ?? '';
     $state = $employee['state'] ?? '';
     $profilePicUrl = $employee['profile_pic_url'] ?? '';
     $designation = $employee['designation'] ?? '';
     $employeeCode = $employee['employee_code'] ?? '';
     $clientId = (int)($employee['client_id'] ?? 0);
     $unitId = (int)($employee['unit_id'] ?? 0);
+    $pinHash = $employee['pin_hash'] ?? '';
 
     $cacheStmt->bind_param('ssissssissssssi',
         $employeeId, $role, $unitId, $unitName, $city, $state,
         $clientName, $clientId, $employee['full_name'], $employee['mobile_number'],
-        $designation, $profilePicUrl, $storedPin, $employeeCode
+        $designation, $profilePicUrl, $pinHash, $employeeCode
     );
     $cacheStmt->execute();
     $cacheStmt->close();
@@ -181,6 +180,7 @@ try {
         'role' => $role,
         'has_custom_pin' => $hasCustomPin,
         'profile_pic_url' => $profilePicUrl,
+        'city' => $city,
         'state' => $state,
         'unit_name' => $unitName,
         'client_name' => $clientName,
@@ -229,16 +229,10 @@ function _trackFailedAttempt(string $rateFile, array $rateData): void
 function _determineRole(array $employee): string
 {
     $employeeRole = strtolower($employee['employee_role'] ?? '');
-    $appRole = strtolower($employee['app_role'] ?? '');
     $workerCategory = strtolower($employee['worker_category'] ?? '');
 
-    // Check app_role first (most specific)
-    if (in_array($appRole, ['manager', 'regional_manager'])) {
-        return $appRole;
-    }
-
     // Check employee_role
-    if (in_array($employeeRole, ['admin', 'manager'])) {
+    if (in_array($employeeRole, ['admin', 'manager', 'regional_manager'])) {
         return $employeeRole;
     }
 
