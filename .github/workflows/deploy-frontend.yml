@@ -1,12 +1,14 @@
-name: Build & Deploy (Static + API via FTP)
+name: Deploy Frontend Only
 
 on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'api/**'
 
 jobs:
-  deploy:
+  deploy-frontend:
     runs-on: ubuntu-latest
 
     steps:
@@ -34,7 +36,7 @@ jobs:
             set ftp:passive-mode on;
             set net:timeout 30;
             set net:max-retries 3;
-            open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
+            open -u '${{ secrets.FTP_USER }},${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
             cd public_html;
             lcd dist;
             mirror -R --no-symlinks --parallel=4 --no-perms --overwrite;
@@ -42,29 +44,8 @@ jobs:
           "
           echo "Frontend deployed successfully"
 
-      - name: Deploy API folder via FTP
+      - name: Deploy root .htaccess
         run: |
-          # Only deploy if api/ folder exists in repo
-          if [ -d "api" ]; then
-            lftp -c "
-              set ftp:ssl-allow no;
-              set ftp:passive-mode on;
-              set net:timeout 30;
-              set net:max-retries 3;
-              open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
-              cd public_html;
-              lcd api;
-              mirror -R --no-symlinks --parallel=4 --no-perms --overwrite;
-              quit
-            "
-            echo "API folder deployed successfully"
-          else
-            echo "No api/ folder found in repo - skipping API deploy"
-          fi
-
-      - name: Deploy .htaccess via FTP
-        run: |
-          # Create a temporary deploy folder with .htaccess
           mkdir -p deploy_tmp
           cat > deploy_tmp/.htaccess << 'HTACCESS'
           # SPA fallback + cache control
@@ -117,7 +98,7 @@ jobs:
             set ftp:passive-mode on;
             set net:timeout 30;
             set net:max-retries 3;
-            open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
+            open -u '${{ secrets.FTP_USER }},${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
             cd public_html;
             lcd deploy_tmp;
             put .htaccess;
@@ -126,39 +107,5 @@ jobs:
           rm -rf deploy_tmp
           echo ".htaccess deployed successfully"
 
-          # Deploy api .htaccess for clean URL routing
-          mkdir -p deploy_api_ess
-          cat > deploy_api_ess/.htaccess << 'HTACCESS'
-          RewriteEngine On
-          RewriteCond %{REQUEST_FILENAME} !-f
-          RewriteCond %{REQUEST_FILENAME} !-d
-          RewriteRule ^(.*)$ $1.php [QSA,L]
-
-          <IfModule mod_headers.c>
-              Header set Access-Control-Allow-Origin "*"
-              Header set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
-              Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-API-KEY, X-Employee-ID"
-          </IfModule>
-
-          <IfModule mod_expires.c>
-              ExpiresActive On
-              ExpiresByType application/json "access plus 0 seconds"
-          </IfModule>
-          HTACCESS
-
-          lftp -c "
-            set ftp:ssl-allow no;
-            set ftp:passive-mode on;
-            set net:timeout 30;
-            set net:max-retries 3;
-            open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
-            cd public_html/api/ess;
-            lcd deploy_api_ess;
-            put .htaccess;
-            quit
-          "
-          rm -rf deploy_api_ess
-          echo "API .htaccess deployed successfully"
-
-      - name: Deploy complete
-        run: echo "All deployment steps completed successfully"
+      - name: Done
+        run: echo "Frontend deployment completed"
