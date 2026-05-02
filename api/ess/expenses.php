@@ -27,7 +27,7 @@ try {
             jsonOutput(['success' => false, 'error' => 'Method not allowed'], 405);
     }
 } catch (Exception $e) {
-    jsonOutput(['success' => false, 'error' => 'Internal server error'], 500);
+    jsonOutput(['success' => false, 'error' => 'Internal server error', '_debug' => ['message' => $e->getMessage(), 'file' => basename($e->getFile()), 'line' => $e->getLine()]], 500);
 }
 
 // ─── GET: List Expenses ───────────────────────────────────────────────────────
@@ -36,6 +36,14 @@ function _handleGetExpenses(): void
 {
     $authId = requireAuth();
     $conn = getDbConnection();
+
+    $view = $_GET['view'] ?? '';
+
+    // Pending team expenses in one query (no N+1)
+    if ($view === 'pending_team') {
+        _handlePendingTeamExpenses($authId);
+        return;
+    }
 
     $queryEmployeeId = $_GET['employee_id'] ?? $authId;
     $statusFilter = $_GET['status'] ?? '';
@@ -161,6 +169,92 @@ function _handleGetExpenses(): void
             ...buildPagination($total, $page, $limit)
         ]
     ]);
+}
+
+// ─── GET: Pending Team Expenses (single query) ───────────────────────────────
+
+function _handlePendingTeamExpenses(string $authId): void
+{
+    $conn = getDbConnection();
+
+    // Get team member IDs from cache (same unit/client)
+    $cacheStmt = $conn->prepare('SELECT unit_id, client_id FROM ess_employee_cache WHERE employee_id = ?');
+    $cacheStmt->bind_param('s', $authId);
+    $cacheStmt->execute();
+    $cache = $cacheStmt->get_result()->fetch_assoc();
+    $cacheStmt->close();
+
+    if (!$cache) {
+        jsonOutput(['success' => true, 'data' => ['items' => []]]);
+    }
+
+    // Build query: find all employees in same unit
+    $teamQuery = 'SELECT employee_id FROM ess_employee_cache WHERE employee_id != ?';
+    $teamTypes = 's';
+    $teamParams = [$authId];
+
+    if (!empty($cache['unit_id'])) {
+        $teamQuery .= ' AND unit_id = ?';
+        $teamTypes .= 'i';
+        $teamParams[] = $cache['unit_id'];
+    } elseif (!empty($cache['client_id'])) {
+        $teamQuery .= ' AND client_id = ?';
+        $teamTypes .= 'i';
+        $teamParams[] = $cache['client_id'];
+    }
+
+    $teamStmt = $conn->prepare($teamQuery);
+    $teamStmt->bind_param($teamTypes, ...$teamParams);
+    $teamStmt->execute();
+    $teamResult = $teamStmt->get_result();
+
+    $teamIds = [];
+    while ($row = $teamResult->fetch_assoc()) {
+        $teamIds[] = $row['employee_id'];
+    }
+    $teamStmt->close();
+
+    if (empty($teamIds)) {
+        jsonOutput(['success' => true, 'data' => ['items' => []]]);
+    }
+
+    // Single query: all pending expenses from team members
+    $placeholders = implode(',', array_fill(0, count($teamIds), '?'));
+    $expQuery = "
+        SELECT e.id, e.employee_id, e.category, e.type, e.amount, e.description,
+               e.bill_url, e.bill_type, e.expense_date, e.status, e.created_at,
+               c.full_name AS employee_name
+        FROM ess_expenses e
+        LEFT JOIN ess_employee_cache c ON c.employee_id = e.employee_id
+        WHERE e.employee_id IN ({$placeholders})
+          AND e.status = 'pending'
+        ORDER BY e.created_at DESC
+        LIMIT 100
+    ";
+
+    $expStmt = $conn->prepare($expQuery);
+    $expStmt->bind_param(str_repeat('s', count($teamIds)), ...$teamIds);
+    $expStmt->execute();
+    $result = $expStmt->get_result();
+
+    $expenses = [];
+    while ($row = $result->fetch_assoc()) {
+        $expenses[] = [
+            'id' => (int)$row['id'],
+            'employee_id' => $row['employee_id'],
+            'employee_name' => $row['employee_name'] ?? 'Unknown',
+            'category' => $row['category'] ?? '',
+            'type' => $row['type'],
+            'amount' => (float)$row['amount'],
+            'description' => $row['description'] ?? '',
+            'expense_date' => $row['expense_date'] ?? '',
+            'status' => $row['status'],
+            'created_at' => $row['created_at'],
+        ];
+    }
+    $expStmt->close();
+
+    jsonOutput(['success' => true, 'data' => ['items' => $expenses]]);
 }
 
 // ─── POST: Create Expense ─────────────────────────────────────────────────────

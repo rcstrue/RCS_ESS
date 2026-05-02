@@ -45,10 +45,10 @@ import {
   fetchExpenses,
   createExpense,
   approveExpense,
-  fetchEmployees,
+  fetchPendingTeamExpenses,
 } from '@/lib/ess-api';
 import { uploadFile, getFileUrl } from '@/lib/api/config';
-import type { Expense, Employee } from '@/lib/ess-types';
+import type { Expense } from '@/lib/ess-types';
 import { EXPENSE_TYPES } from '@/lib/ess-types';
 
 interface ExpensesPageProps {
@@ -195,51 +195,23 @@ export function ExpensesPage({
     }
   }, [employeeId]);
 
-  // ── Load pending team expenses ──
+  // ── Load pending team expenses (single API call) ──
   const loadPendingTeamExpenses = useCallback(async () => {
     if (!canApprove) return;
     setIsLoadingTeam(true);
     try {
-      const { data: empData } = await fetchEmployees({
-        scope: 'team',
-        requester_id: employeeId,
-        limit: 100,
-      });
-
-      const teamMembers = empData?.items ?? [];
-
-      if (teamMembers.length === 0) {
-        setPendingTeamExpenses([]);
-        setIsLoadingTeam(false);
-        return;
+      const { data, error } = await fetchPendingTeamExpenses();
+      if (error) {
+        toast.error('Failed to load team expenses');
+      } else {
+        setPendingTeamExpenses(data?.items ?? []);
       }
-
-      const results = await Promise.allSettled(
-        teamMembers.map((member) =>
-          fetchExpenses(member.id, 'pending'),
-        ),
-      );
-
-      const allPending: Expense[] = [];
-      results.forEach((result) => {
-        if (result.status === 'fulfilled' && result.value.data?.items) {
-          allPending.push(...result.value.data.items);
-        }
-      });
-
-      allPending.sort(
-        (a, b) =>
-          new Date(b.created_at ?? 0).getTime() -
-          new Date(a.created_at ?? 0).getTime(),
-      );
-
-      setPendingTeamExpenses(allPending);
     } catch {
       toast.error('Failed to load team expenses');
     } finally {
       setIsLoadingTeam(false);
     }
-  }, [employeeId, canApprove]);
+  }, [canApprove]);
 
   useEffect(() => {
     loadMyExpenses();
