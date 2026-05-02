@@ -41,12 +41,19 @@ function _handleGetExpenses(): void
     $statusFilter = $_GET['status'] ?? '';
     $categoryFilter = $_GET['category'] ?? '';
     $typeFilter = $_GET['type'] ?? '';
+    $monthFilter = $_GET['month'] ?? ''; // Format: YYYY-MM
     [$page, $limit, $offset] = getPaginationParams();
 
     // Build where clause
     $where = 'WHERE employee_id = ?';
     $types = 's';
     $params = [$queryEmployeeId];
+
+    if (!empty($monthFilter) && preg_match('/^\d{4}-\d{2}$/', $monthFilter)) {
+        $where .= ' AND expense_date LIKE ?';
+        $types .= 's';
+        $params[] = $monthFilter . '%';
+    }
 
     if (!empty($statusFilter)) {
         $where .= ' AND status = ?';
@@ -122,11 +129,35 @@ function _handleGetExpenses(): void
     $totalAmount = (float)$sumStmt->get_result()->fetch_assoc()['total_amount'];
     $sumStmt->close();
 
+    // Monthly summary: total advance received, total approved expenses
+    $monthSummary = ['advance_received' => 0, 'approved_expenses' => 0];
+    $currentMonth = !empty($monthFilter) ? $monthFilter : date('Y-m');
+    if (preg_match('/^\d{4}-\d{2}$/', $currentMonth)) {
+        $monthWhere = 'WHERE employee_id = ? AND expense_date LIKE ?';
+        $monthParams = [$queryEmployeeId, $currentMonth . '%'];
+
+        // Total approved advances (money received from company)
+        $advStmt = $conn->prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM ess_expenses {$monthWhere} AND type = 'advance' AND status IN ('approved', 'reimbursed')");
+        $advStmt->bind_param('ss', ...$monthParams);
+        $advStmt->execute();
+        $monthSummary['advance_received'] = (float)$advStmt->get_result()->fetch_assoc()['total'];
+        $advStmt->close();
+
+        // Total approved expenses
+        $expStmt = $conn->prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM ess_expenses {$monthWhere} AND type = 'expense' AND status IN ('approved', 'reimbursed')");
+        $expStmt->bind_param('ss', ...$monthParams);
+        $expStmt->execute();
+        $monthSummary['approved_expenses'] = (float)$expStmt->get_result()->fetch_assoc()['total'];
+        $expStmt->close();
+    }
+    $monthSummary['balance'] = $monthSummary['advance_received'] - $monthSummary['approved_expenses'];
+
     jsonOutput([
         'success' => true,
         'data' => [
             'items' => $expenses,
             'total_amount' => $totalAmount,
+            'month_summary' => $monthSummary,
             ...buildPagination($total, $page, $limit)
         ]
     ]);
