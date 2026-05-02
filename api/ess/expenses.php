@@ -150,7 +150,7 @@ function _handleCreateExpense(): void
     $billType = trim($input['bill_type'] ?? '');
 
     $validCategories = ['advance', 'expense', 'employee_advance'];
-    $validTypes = ['travel', 'food', 'cab', 'supplies', 'medical', 'other'];
+    $validTypes = ['advance', 'expense'];
 
     if (empty($category) || !in_array($category, $validCategories)) {
         jsonOutput(['success' => false, 'error' => 'Invalid category. Allowed: ' . implode(', ', $validCategories)], 400);
