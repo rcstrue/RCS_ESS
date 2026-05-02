@@ -15,7 +15,9 @@ interface MobileEntryProps {
 
 export function MobileEntry({ onMobileSubmit, onLoginSubmit, checkMobileExists }: MobileEntryProps) {
   const [mobileNumber, setMobileNumber] = useState('');
-  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [dobDay, setDobDay] = useState('');
+  const [dobMonth, setDobMonth] = useState('');
+  const [dobYear, setDobYear] = useState('');
   const [isChecking, setIsChecking] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [showLoginForm, setShowLoginForm] = useState(false);
@@ -116,14 +118,26 @@ export function MobileEntry({ onMobileSubmit, onLoginSubmit, checkMobileExists }
   };
 
   const handleLogin = async () => {
-    if (!dateOfBirth) {
-      setError('Please enter your date of birth');
+    const day = dobDay.padStart(2, '0');
+    const month = dobMonth.padStart(2, '0');
+    const year = dobYear;
+
+    if (!day || !month || !year || year.length !== 4) {
+      setError('Please enter your complete date of birth');
+      return;
+    }
+
+    const dayNum = parseInt(day);
+    const monthNum = parseInt(month);
+    if (dayNum < 1 || dayNum > 31 || monthNum < 1 || monthNum > 12) {
+      setError('Please enter a valid date');
       return;
     }
 
     setIsLoggingIn(true);
     setError('');
 
+    const dateOfBirth = `${year}-${month}-${day}`;
     const result = await onLoginSubmit(mobileNumber, dateOfBirth);
     
     if (!result.success) {
@@ -136,7 +150,9 @@ export function MobileEntry({ onMobileSubmit, onLoginSubmit, checkMobileExists }
   const handleBackToMobile = () => {
     setShowLoginForm(false);
     setShowProfileCapture(false);
-    setDateOfBirth('');
+    setDobDay('');
+    setDobMonth('');
+    setDobYear('');
     setError('');
     setProfilePicUrl(null);
   };
@@ -293,13 +309,44 @@ export function MobileEntry({ onMobileSubmit, onLoginSubmit, checkMobileExists }
                     <Calendar className="w-4 h-4 text-muted-foreground" />
                     Date of Birth (for verification)
                   </Label>
-                  <Input
-                    id="dob"
-                    type="date"
-                    value={dateOfBirth}
-                    onChange={(e) => setDateOfBirth(e.target.value)}
-                    className="h-12"
-                  />
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">DD</label>
+                      <Input
+                        type="tel"
+                        inputMode="numeric"
+                        maxLength={2}
+                        placeholder="DD"
+                        value={dobDay}
+                        onChange={(e) => setDobDay(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                        className="h-12 text-center text-lg"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">MM</label>
+                      <Input
+                        type="tel"
+                        inputMode="numeric"
+                        maxLength={2}
+                        placeholder="MM"
+                        value={dobMonth}
+                        onChange={(e) => setDobMonth(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                        className="h-12 text-center text-lg"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">YYYY</label>
+                      <Input
+                        type="tel"
+                        inputMode="numeric"
+                        maxLength={4}
+                        placeholder="YYYY"
+                        value={dobYear}
+                        onChange={(e) => setDobYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                        className="h-12 text-center text-lg"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {error && (
@@ -316,7 +363,7 @@ export function MobileEntry({ onMobileSubmit, onLoginSubmit, checkMobileExists }
                   </Button>
                   <Button
                     onClick={handleLogin}
-                    disabled={!dateOfBirth || isLoggingIn}
+                    disabled={!dobDay || !dobMonth || dobYear.length !== 4 || isLoggingIn}
                     className="flex-1 h-12"
                   >
                     {isLoggingIn ? (

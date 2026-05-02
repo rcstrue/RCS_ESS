@@ -160,15 +160,15 @@ function _handleGetExpenses(): void
     }
     $monthSummary['balance'] = $monthSummary['advance_received'] - $monthSummary['approved_expenses'];
 
-    jsonOutput([
+    $response = [
         'success' => true,
-        'data' => [
+        'data' => array_merge([
             'items' => $expenses,
             'total_amount' => $totalAmount,
             'month_summary' => $monthSummary,
-            ...buildPagination($total, $page, $limit)
-        ]
-    ]);
+        ], buildPagination($total, $page, $limit))
+    ];
+    jsonOutput($response);
 }
 
 // ─── GET: Pending Team Expenses (single query) ───────────────────────────────
@@ -186,6 +186,7 @@ function _handlePendingTeamExpenses(string $authId): void
 
     if (!$cache) {
         jsonOutput(['success' => true, 'data' => ['items' => []]]);
+        return;
     }
 
     // Build query: find all employees in same unit
@@ -216,6 +217,7 @@ function _handlePendingTeamExpenses(string $authId): void
 
     if (empty($teamIds)) {
         jsonOutput(['success' => true, 'data' => ['items' => []]]);
+        return;
     }
 
     // Single query: all pending expenses from team members
