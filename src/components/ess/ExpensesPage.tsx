@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import {
   Plus,
@@ -9,12 +9,14 @@ import {
   XCircle,
   Clock,
   Banknote,
-  AlertTriangle,
   IndianRupee,
   CalendarDays,
   Check,
   X,
-  Filter,
+  Upload,
+  ChevronLeft,
+  ChevronRight,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,7 +25,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
@@ -46,6 +47,7 @@ import {
   approveExpense,
   fetchEmployees,
 } from '@/lib/ess-api';
+import { uploadFile, getFileUrl } from '@/lib/api/config';
 import type { Expense, Employee } from '@/lib/ess-types';
 import { EXPENSE_TYPES } from '@/lib/ess-types';
 
@@ -84,15 +86,19 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 // ── Formatters ──
-const formatCurrency = (amount: number): string =>
-  new Intl.NumberFormat('en-IN', {
+const formatCurrency = (amount: number | undefined | null): string => {
+  const num = Number(amount);
+  if (isNaN(num)) return '₹0';
+  return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
-  }).format(amount);
+  }).format(num);
+};
 
 const formatDate = (dateStr: string): string => {
+  if (!dateStr) return '';
   const d = new Date(
     new Date(dateStr).toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
   );
@@ -106,6 +112,28 @@ const formatDate = (dateStr: string): string => {
 /** Get today's date string in IST for the max attribute */
 const todayISTString = () =>
   new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+/** Get current month as YYYY-MM */
+const currentMonthString = () => {
+  const now = new Date();
+  now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  return `${ist.getFullYear()}-${String(ist.getMonth() + 1).padStart(2, '0')}`;
+};
+
+/** Format YYYY-MM to "Month Year" */
+const formatMonthYear = (monthStr: string): string => {
+  const [year, month] = monthStr.split('-').map(Number);
+  const date = new Date(year, month - 1, 1);
+  return date.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+};
+
+/** Navigate months: +1 or -1 */
+const navigateMonth = (monthStr: string, direction: number): string => {
+  const [year, month] = monthStr.split('-').map(Number);
+  const date = new Date(year, month - 1 + direction, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
 
 // ── Main component ──
 export function ExpensesPage({
@@ -124,13 +152,22 @@ export function ExpensesPage({
   const [pendingTeamExpenses, setPendingTeamExpenses] = useState<Expense[]>([]);
   const [isLoadingTeam, setIsLoadingTeam] = useState(false);
 
+  // Month filter
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthString());
+
   // Submit dialog
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
   const [submitType, setSubmitType] = useState<string>('expense');
   const [submitAmount, setSubmitAmount] = useState('');
-  const [submitDate, setSubmitDate] = useState('');
+  const [submitDate, setSubmitDate] = useState(todayISTString());
   const [submitDescription, setSubmitDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Bill upload
+  const [billFile, setBillFile] = useState<File | null>(null);
+  const [billPreview, setBillPreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Reject dialog
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
@@ -163,7 +200,6 @@ export function ExpensesPage({
     if (!canApprove) return;
     setIsLoadingTeam(true);
     try {
-      // Fetch team members
       const { data: empData } = await fetchEmployees({
         scope: 'team',
         requester_id: employeeId,
@@ -178,7 +214,6 @@ export function ExpensesPage({
         return;
       }
 
-      // Fetch pending expenses for each team member in parallel
       const results = await Promise.allSettled(
         teamMembers.map((member) =>
           fetchExpenses(member.id, 'pending'),
@@ -192,7 +227,6 @@ export function ExpensesPage({
         }
       });
 
-      // Sort by created_at descending (most recent first)
       allPending.sort(
         (a, b) =>
           new Date(b.created_at ?? 0).getTime() -
@@ -217,16 +251,54 @@ export function ExpensesPage({
     }
   }, [canApprove, loadPendingTeamExpenses]);
 
-  // ── Summary ──
-  const summary = useMemo(() => {
-    const pendingAmount = myExpenses
+  // ── Month-filtered expenses ──
+  const monthExpenses = useMemo(() => {
+    return myExpenses.filter((e) => {
+      if (!e.expense_date) return false;
+      return e.expense_date.startsWith(selectedMonth);
+    });
+  }, [myExpenses, selectedMonth]);
+
+  // ── Summary for selected month ──
+  const monthSummary = useMemo(() => {
+    const totalAdvance = monthExpenses
+      .filter((e) => e.type === 'advance' && (e.status === 'approved' || e.status === 'reimbursed'))
+      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+    const totalExpense = monthExpenses
+      .filter((e) => e.type === 'expense' && (e.status === 'approved' || e.status === 'reimbursed'))
+      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+    const totalPending = monthExpenses
       .filter((e) => e.status === 'pending')
-      .reduce((sum, e) => sum + e.amount, 0);
-    const approvedAmount = myExpenses
-      .filter((e) => e.status === 'approved' || e.status === 'reimbursed')
-      .reduce((sum, e) => sum + e.amount, 0);
-    return { pendingAmount, approvedAmount };
-  }, [myExpenses]);
+      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+    const balance = totalAdvance - totalExpense;
+
+    return { totalAdvance, totalExpense, totalPending, balance };
+  }, [monthExpenses]);
+
+  // ── Handle bill file select ──
+  const handleBillSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File too large. Max 5MB.');
+      return;
+    }
+
+    setBillFile(file);
+
+    // Preview
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = () => setBillPreview(reader.result as string);
+      reader.readAsDataURL(file);
+    } else {
+      setBillPreview(null);
+    }
+  };
 
   // ── Submit expense ──
   const handleSubmitExpense = async () => {
@@ -245,7 +317,23 @@ export function ExpensesPage({
     }
 
     setIsSubmitting(true);
+
     try {
+      // Upload bill if selected
+      let billUrl = '';
+      if (billFile) {
+        setIsUploading(true);
+        const uploadResult = await uploadFile(billFile, 'expenses');
+        if (uploadResult.error || !uploadResult.url) {
+          toast.error('Failed to upload bill: ' + uploadResult.error);
+          setIsSubmitting(false);
+          setIsUploading(false);
+          return;
+        }
+        billUrl = uploadResult.url;
+        setIsUploading(false);
+      }
+
       const { error } = await createExpense({
         employee_id: employeeId,
         type: submitType as 'advance' | 'expense',
@@ -255,7 +343,7 @@ export function ExpensesPage({
       });
 
       if (error) {
-        toast.error('Failed to submit expense');
+        toast.error(error);
       } else {
         toast.success('Expense submitted successfully');
         resetSubmitForm();
@@ -266,14 +354,18 @@ export function ExpensesPage({
       toast.error('Something went wrong');
     } finally {
       setIsSubmitting(false);
+      setIsUploading(false);
     }
   };
 
   const resetSubmitForm = () => {
     setSubmitType('expense');
     setSubmitAmount('');
-    setSubmitDate('');
+    setSubmitDate(todayISTString());
     setSubmitDescription('');
+    setBillFile(null);
+    setBillPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   // ── Approve expense ──
@@ -286,6 +378,7 @@ export function ExpensesPage({
       } else {
         toast.success('Expense approved');
         loadPendingTeamExpenses();
+        loadMyExpenses();
       }
     } catch {
       toast.error('Something went wrong');
@@ -324,6 +417,7 @@ export function ExpensesPage({
         setRejectExpenseId(null);
         setRejectionReason('');
         loadPendingTeamExpenses();
+        loadMyExpenses();
       }
     } catch {
       toast.error('Something went wrong');
@@ -341,13 +435,49 @@ export function ExpensesPage({
 
   return (
     <div className="flex flex-col gap-4 pb-4">
-      {/* Header */}
+      {/* Header with month navigation */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Receipt className="h-5 w-5 text-primary" />
           <h2 className="text-lg font-semibold">Expenses</h2>
         </div>
+        {/* Month navigator */}
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setSelectedMonth((m) => navigateMonth(m, -1))}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm font-medium px-2 min-w-[140px] text-center">
+            {formatMonthYear(selectedMonth)}
+          </span>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setSelectedMonth((m) => navigateMonth(m, 1))}
+            disabled={selectedMonth >= currentMonthString()}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
+
+      {/* Month header banner */}
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="p-4">
+          <h3 className="text-sm font-semibold text-primary mb-1">
+            Expense / Advance For the month of{' '}
+            <span className="text-base">{formatMonthYear(selectedMonth)}</span>
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            {monthExpenses.length} record{monthExpenses.length !== 1 ? 's' : ''} this month
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -355,9 +485,9 @@ export function ExpensesPage({
           <TabsTrigger value="my" className="flex-1 sm:flex-auto">
             <Wallet className="h-4 w-4 mr-1.5" />
             My Expenses
-            {summary.pendingAmount > 0 && (
+            {monthSummary.totalPending > 0 && (
               <Badge variant="secondary" className="ml-2 text-xs px-1.5">
-                {myExpenses.filter((e) => e.status === 'pending').length}
+                {monthExpenses.filter((e) => e.status === 'pending').length}
               </Badge>
             )}
           </TabsTrigger>
@@ -377,33 +507,55 @@ export function ExpensesPage({
         {/* ── My Expenses Tab ── */}
         <TabsContent value="my" className="mt-4">
           {/* Summary cards */}
-          <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="grid grid-cols-2 gap-3 mb-3">
             <Card>
               <CardContent className="p-3 flex flex-col gap-1">
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Clock className="h-3.5 w-3.5 text-amber-500" />
-                  Pending
+                  <Banknote className="h-3.5 w-3.5 text-emerald-500" />
+                  Total Advance
                 </div>
-                <span className="text-lg font-bold text-amber-700 dark:text-amber-400">
-                  {formatCurrency(summary.pendingAmount)}
+                <span className="text-base font-bold text-emerald-700 dark:text-emerald-400">
+                  {formatCurrency(monthSummary.totalAdvance)}
                 </span>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-3 flex flex-col gap-1">
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                  Approved
+                  <Receipt className="h-3.5 w-3.5 text-blue-500" />
+                  Approved Expense
                 </div>
-                <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
-                  {formatCurrency(summary.approvedAmount)}
+                <span className="text-base font-bold text-blue-700 dark:text-blue-400">
+                  {formatCurrency(monthSummary.totalExpense)}
                 </span>
               </CardContent>
             </Card>
           </div>
 
+          {/* Balance card */}
+          <Card className={`border-2 ${monthSummary.balance < 0 ? 'border-rose-500/40 bg-rose-500/5' : 'border-emerald-500/30 bg-emerald-500/5'}`}>
+            <CardContent className="p-3 flex items-center justify-between">
+              <div>
+                <div className="text-xs text-muted-foreground mb-0.5">
+                  {monthSummary.balance < 0 ? 'Used Over Advance' : 'Remaining Balance'}
+                </div>
+                <span className={`text-xl font-bold ${monthSummary.balance < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                  {formatCurrency(Math.abs(monthSummary.balance))}
+                </span>
+              </div>
+              {monthSummary.totalPending > 0 && (
+                <div className="text-right">
+                  <div className="text-xs text-muted-foreground mb-0.5">Pending</div>
+                  <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                    {formatCurrency(monthSummary.totalPending)}
+                  </span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Submit button */}
-          <div className="flex justify-end mb-3">
+          <div className="flex justify-end mt-3 mb-3">
             <Button size="sm" onClick={() => setIsSubmitDialogOpen(true)}>
               <Plus className="h-4 w-4" />
               <span className="hidden sm:inline">Submit Expense</span>
@@ -413,17 +565,17 @@ export function ExpensesPage({
           {/* Expenses list */}
           {isLoadingMy ? (
             <LoadingSkeleton />
-          ) : myExpenses.length === 0 ? (
+          ) : monthExpenses.length === 0 ? (
             <EmptyState
-              title="No expenses yet"
-              description="Submit your first expense claim to get started."
+              title="No expenses this month"
+              description="Submit your first expense claim for this month."
               onAction={() => setIsSubmitDialogOpen(true)}
               actionLabel="Submit Expense"
             />
           ) : (
-            <ScrollArea className="h-[calc(100vh-320px)]">
+            <ScrollArea className="h-[calc(100vh-480px)]">
               <div className="flex flex-col gap-3">
-                {myExpenses.map((expense) => (
+                {monthExpenses.map((expense) => (
                   <ExpenseCard key={expense.id} expense={expense} />
                 ))}
               </div>
@@ -439,7 +591,7 @@ export function ExpensesPage({
             ) : pendingTeamExpenses.length === 0 ? (
               <EmptyState
                 title="No pending approvals"
-                description="All team expenses have been processed. New pending expenses will appear here."
+                description="All team expenses have been processed."
               />
             ) : (
               <ScrollArea className="h-[calc(100vh-260px)]">
@@ -518,7 +670,7 @@ export function ExpensesPage({
               </div>
             </div>
 
-            {/* Date */}
+            {/* Date - defaults to today */}
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">
                 Expense Date <span className="text-destructive">*</span>
@@ -542,6 +694,62 @@ export function ExpensesPage({
                 maxLength={500}
               />
             </div>
+
+            {/* Bill Upload */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">Upload Bill / Receipt</label>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*,.pdf"
+                onChange={handleBillSelect}
+                className="hidden"
+                id="bill-upload"
+              />
+              {!billFile ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-20 border-dashed flex flex-col gap-1 cursor-pointer"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">
+                    Tap to upload bill (Image or PDF, max 5MB)
+                  </span>
+                </Button>
+              ) : (
+                <div className="flex items-center gap-3 p-3 border rounded-lg">
+                  {billPreview ? (
+                    <div className="h-12 w-12 rounded overflow-hidden bg-muted flex-shrink-0">
+                      <img src={billPreview} alt="Bill preview" className="h-full w-full object-cover" />
+                    </div>
+                  ) : (
+                    <div className="h-12 w-12 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                      <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{billFile.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(billFile.size / 1024).toFixed(1)} KB
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground"
+                    onClick={() => {
+                      setBillFile(null);
+                      setBillPreview(null);
+                      if (fileInputRef.current) fileInputRef.current.value = '';
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
@@ -557,12 +765,12 @@ export function ExpensesPage({
             </Button>
             <Button
               onClick={handleSubmitExpense}
-              disabled={isSubmitting || !submitType || !submitAmount || !submitDate}
+              disabled={isSubmitting || isUploading || !submitType || !submitAmount || !submitDate}
             >
-              {isSubmitting ? (
+              {isSubmitting || isUploading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Submitting...
+                  {isUploading ? 'Uploading...' : 'Submitting...'}
                 </>
               ) : (
                 'Submit'
@@ -642,15 +850,15 @@ function ExpenseCard({ expense }: { expense: Expense }) {
       <CardContent className="p-4">
         {/* Top row: badges */}
         <div className="flex flex-wrap items-center gap-2 mb-2">
-          <Badge variant="outline" className={TYPE_BADGE[expense.type]}>
+          <Badge variant="outline" className={TYPE_BADGE[expense.type] || ''}>
             {TYPE_LABEL[expense.type] || expense.type}
           </Badge>
-          <Badge variant="outline" className={STATUS_BADGE[expense.status]}>
+          <Badge variant="outline" className={STATUS_BADGE[expense.status] || ''}>
             {STATUS_LABEL[expense.status] || expense.status}
           </Badge>
         </div>
 
-        {/* Amount */}
+        {/* Amount - safe parsing */}
         <div className="text-xl font-bold mb-1">
           {formatCurrency(expense.amount)}
         </div>
@@ -703,7 +911,7 @@ function PendingTeamExpenseCard({
           <span className="font-semibold text-sm">
             {expense.employee_name || 'Unknown'}
           </span>
-          <Badge variant="outline" className={TYPE_BADGE[expense.type]}>
+          <Badge variant="outline" className={TYPE_BADGE[expense.type] || ''}>
             {TYPE_LABEL[expense.type] || expense.type}
           </Badge>
         </div>
@@ -804,6 +1012,14 @@ function LoadingSkeleton() {
           </Card>
         ))}
       </div>
+
+      {/* Balance card skeleton */}
+      <Card>
+        <CardContent className="p-3">
+          <Skeleton className="h-3 w-32 mb-2" />
+          <Skeleton className="h-6 w-28" />
+        </CardContent>
+      </Card>
 
       {/* Card skeletons */}
       <div className="flex flex-col gap-3">
