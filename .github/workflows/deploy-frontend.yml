@@ -30,17 +30,24 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y lftp
 
       - name: Deploy frontend via FTP
+        env:
+          LFTP_PW: ${{ secrets.FTP_PASS }}
         run: |
-          lftp -c "
-            set ftp:ssl-allow no;
-            set ftp:passive-mode on;
-            set net:timeout 30;
-            set net:max-retries 3;
-            open -u '${{ secrets.FTP_USER }},${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
-            lcd dist;
-            mirror -R --no-symlinks --parallel=4 --no-perms --overwrite;
-            quit
-          "
+          lftp -u '${{ secrets.FTP_USER }},${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }} << 'EOF'
+          set ftp:ssl-allow no
+          set ftp:passive-mode on
+          set ftp:sync-mode off
+          set net:timeout 60
+          set net:max-retries 5
+          set net:reconnect-interval-base 5
+          set net:reconnect-interval-multiplier 2
+          set net:connection-limit 2
+          set mirror:parallel-transfer-count 2
+          set mirror:use-pget-n 2
+          lcd dist
+          mirror -R --no-symlinks --no-perms --overwrite --verbose=1
+          quit
+          EOF
           echo "Frontend deployed successfully"
 
       - name: Deploy root .htaccess
@@ -92,16 +99,17 @@ jobs:
           </IfModule>
           HTACCESS
 
-          lftp -c "
-            set ftp:ssl-allow no;
-            set ftp:passive-mode on;
-            set net:timeout 30;
-            set net:max-retries 3;
-            open -u '${{ secrets.FTP_USER }},${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
-            lcd deploy_tmp;
-            put .htaccess;
-            quit
-          "
+          lftp -u '${{ secrets.FTP_USER }},${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }} << 'EOF'
+          set ftp:ssl-allow no
+          set ftp:passive-mode on
+          set net:timeout 60
+          set net:max-retries 5
+          set net:reconnect-interval-base 5
+          set net:reconnect-interval-multiplier 2
+          lcd deploy_tmp
+          put .htaccess
+          quit
+          EOF
           rm -rf deploy_tmp
           echo ".htaccess deployed successfully"
 
