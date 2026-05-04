@@ -2,6 +2,12 @@
 /**
  * ESS API — Login Endpoint
  * POST: Validate mobile + PIN, return JWT token and employee data
+ *
+ * PIN Logic:
+ *   1. Check ess_employee_cache.pin — if set, validate against it (custom PIN)
+ *   2. If cache pin is NULL, validate against employees.date_of_birth (birth year, 4 digits)
+ *   3. If login via birth year → return has_custom_pin=false → force PIN change
+ *   4. Custom PIN is saved ONLY in ess_employee_cache.pin (NOT in employees table)
  */
 
 require_once __DIR__ . '/config.php';
@@ -14,7 +20,9 @@ try {
     validateApiKey();
 
     $input = getInput();
-    $mobile = trim($input['mobile_number'] ?? '');
+
+    // Accept both camelCase and snake_case field names
+    $mobile = trim($input['mobile_number'] ?? $input['mobileNumber'] ?? '');
     $pin = trim($input['pin'] ?? '');
 
     if (empty($mobile)) {
@@ -22,7 +30,7 @@ try {
         return;
     }
     if (empty($pin) || !preg_match('/^\d{4,10}$/', $pin)) {
-        jsonOutput(array('success' => false, 'error' => 'Invalid PIN format'), 400);
+        jsonOutput(array('success' => false, 'error' => 'Invalid PIN format. Use 4-10 digits.'), 400);
         return;
     }
 
@@ -48,12 +56,21 @@ try {
     $conn = getDbConnection();
 
     $stmt = $conn->prepare('
-        SELECT e.*, c.name AS client_name, c.client_code, u.name AS unit_name, u.city AS unit_city, u.state AS unit_state
+        SELECT e.id, e.full_name, e.mobile_number, e.email, e.designation, e.department,
+               e.state AS emp_state, e.date_of_joining, e.employee_code, e.employee_role,
+               e.app_role, e.worker_category, e.profile_pic_url, e.date_of_birth,
+               c.name AS client_name, c.client_code,
+               u.name AS unit_name, u.city AS unit_city, u.state AS unit_state,
+               e.client_id, e.unit_id
         FROM employees e
         LEFT JOIN clients c ON c.id = e.client_id
         LEFT JOIN units u ON u.id = e.unit_id
         WHERE e.mobile_number = ? AND e.status = ?
     ');
+    if (!$stmt) {
+        jsonOutput(array('success' => false, 'error' => 'Database query error'), 500);
+        return;
+    }
     $approvedStatus = 'approved';
     $stmt->bind_param('ss', $mobile, $approvedStatus);
     $stmt->execute();
@@ -68,17 +85,36 @@ try {
     }
 
     // ─── PIN Validation ───────────────────────────────────────────────────
-    $storedPin = $employee['pin'];
+    $employeeId = (string)$employee['id'];
     $validPin = false;
+    $hasCustomPin = false;
 
-    if (!empty($storedPin) && $storedPin === $pin) {
-        $validPin = true;
-    }
-    if (!$validPin && !empty($employee['date_of_birth'])) {
-        if (substr($employee['date_of_birth'], 0, 4) === $pin) {
-            $validPin = true;
+    // Step 1: Check ess_employee_cache for custom PIN
+    $cacheStmt = $conn->prepare('SELECT pin FROM ess_employee_cache WHERE employee_id = ?');
+    if ($cacheStmt) {
+        $cacheStmt->bind_param('s', $employeeId);
+        $cacheStmt->execute();
+        $cacheRow = $cacheStmt->get_result()->fetch_assoc();
+        $cacheStmt->close();
+
+        if ($cacheRow && !empty($cacheRow['pin'])) {
+            // Custom PIN exists in cache — validate against it
+            $hasCustomPin = true;
+            if ($cacheRow['pin'] === $pin) {
+                $validPin = true;
+            }
         }
     }
+
+    // Step 2: If no custom PIN or custom PIN didn't match, try birth year
+    if (!$validPin && !$hasCustomPin && !empty($employee['date_of_birth'])) {
+        $birthYear = substr($employee['date_of_birth'], 0, 4);
+        if ($birthYear === $pin) {
+            $validPin = true;
+            // has_custom_pin remains false → will trigger force PIN change
+        }
+    }
+
     if (!$validPin) {
         _trackFailedAttempt($rateFile, $rateData);
         jsonOutput(array('success' => false, 'error' => 'Invalid mobile number or PIN'), 401);
@@ -86,20 +122,15 @@ try {
     }
 
     $role = _determineRole($employee);
-    $employeeId = (string)$employee['id'];
-    $hasCustomPin = ($employee['has_custom_pin'] ?? 0) == 1 ? 1 : 0;
 
-    // ─── Update Employee Cache ───────────────────────────────────────────
-    // Column order: employee_id(s), role(s), unit_id(i), unit_name(s), city(s), state(s),
-    //               client_name(s), client_id(i), full_name(s), mobile_number(s),
-    //               designation(s), profile_pic_url(s), pin(s), employee_code(s)
+    // ─── Update Employee Cache (WITHOUT pin — pin is set only by change-pin endpoint) ──
     $unitName = $employee['unit_name'] ?? '';
     $clientName = $employee['client_name'] ?? '';
     $city = isset($employee['unit_city']) ? $employee['unit_city'] : '';
     $state = isset($employee['unit_state']) ? $employee['unit_state'] : '';
     $profilePicUrl = $employee['profile_pic_url'] ?? '';
     $designation = $employee['designation'] ?? '';
-    $employeeCode = $employee['employee_code'] ?? '';
+    $employeeCode = (string)($employee['employee_code'] ?? '');
     $clientId = (int)($employee['client_id'] ?? 0);
     $unitId = (int)($employee['unit_id'] ?? 0);
 
@@ -107,8 +138,8 @@ try {
         INSERT INTO ess_employee_cache (
             employee_id, role, unit_id, unit_name, city, state,
             client_name, client_id, full_name, mobile_number,
-            designation, profile_pic_url, pin, employee_code
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            designation, profile_pic_url, employee_code
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
             role = VALUES(role),
             unit_id = VALUES(unit_id),
@@ -121,13 +152,16 @@ try {
             mobile_number = VALUES(mobile_number),
             designation = VALUES(designation),
             profile_pic_url = VALUES(profile_pic_url),
-            pin = VALUES(pin),
             employee_code = VALUES(employee_code)
     ');
-    $cacheStmt->bind_param('ssissssissssssi',
+    if (!$cacheStmt) {
+        jsonOutput(array('success' => false, 'error' => 'Failed to update cache'), 500);
+        return;
+    }
+    $cacheStmt->bind_param('ssissssissssss',
         $employeeId, $role, $unitId, $unitName, $city, $state,
         $clientName, $clientId, $employee['full_name'], $employee['mobile_number'],
-        $designation, $profilePicUrl, $storedPin, $employeeCode
+        $designation, $profilePicUrl, $employeeCode
     );
     $cacheStmt->execute();
     $cacheStmt->close();
@@ -146,6 +180,7 @@ try {
         'data' => array(
             'employee' => array(
                 'employee_id' => $employeeId,
+                'id' => (int)$employee['id'],
                 'full_name' => $employee['full_name'],
                 'mobile_number' => $employee['mobile_number'],
                 'email' => isset($employee['email']) ? $employee['email'] : '',
@@ -157,6 +192,7 @@ try {
                 'profile_pic_url' => $profilePicUrl,
                 'city' => $city,
                 'state' => $state,
+                'unit_name' => $unitName,
                 'unit_name' => $unitName,
                 'client_name' => $clientName,
                 'date_of_joining' => isset($employee['date_of_joining']) ? $employee['date_of_joining'] : '',

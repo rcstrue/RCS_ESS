@@ -3,6 +3,7 @@
  * ESS API — Employee Directory Endpoint
  * GET: Search/filter employees
  *   scope: team (same unit/client), unit, all
+ *   role_filter: all, managers, admin (filter by role)
  *   q: search query (name, code, mobile)
  *   client_id, unit_id: filter by client/unit
  *   page, limit: pagination
@@ -21,6 +22,7 @@ try {
     $conn = getDbConnection();
 
     $scope = $_GET['scope'] ?? 'all';
+    $roleFilter = $_GET['role_filter'] ?? 'all';
     $search = trim($_GET['q'] ?? '');
     $clientId = $_GET['client_id'] ?? '';
     $unitId = $_GET['unit_id'] ?? '';
@@ -32,9 +34,21 @@ try {
     $types = 's';
     $params = array('approved');
 
+    // Role-based filtering (all, managers, admin)
+    if ($roleFilter === 'managers') {
+        $whereClause .= " AND (e.employee_role IN ('manager') OR e.app_role IN ('manager', 'regional_manager'))";
+    } elseif ($roleFilter === 'admin') {
+        $whereClause .= " AND e.employee_role = 'admin'";
+    }
+    // 'all' = no role filter (default)
+
     // Scope-based filtering
     if ($scope === 'team') {
         $cacheStmt = $conn->prepare('SELECT unit_id, client_id FROM ess_employee_cache WHERE employee_id = ?');
+        if (!$cacheStmt) {
+            jsonOutput(array('success' => false, 'error' => 'Database error'), 500);
+            return;
+        }
         $cacheStmt->bind_param('s', $employeeId);
         $cacheStmt->execute();
         $cacheData = $cacheStmt->get_result()->fetch_assoc();
@@ -66,6 +80,10 @@ try {
     } elseif ($scope === 'unit') {
         if (empty($unitId)) {
             $cacheStmt = $conn->prepare('SELECT unit_id FROM ess_employee_cache WHERE employee_id = ?');
+            if (!$cacheStmt) {
+                jsonOutput(array('success' => false, 'error' => 'Database error'), 500);
+                return;
+            }
             $cacheStmt->bind_param('s', $employeeId);
             $cacheStmt->execute();
             $cacheData = $cacheStmt->get_result()->fetch_assoc();
@@ -107,6 +125,10 @@ try {
     // ─── Count ───────────────────────────────────────────────────────────
     $countQuery = "SELECT COUNT(*) AS total FROM employees e {$whereClause}";
     $countStmt = $conn->prepare($countQuery);
+    if (!$countStmt) {
+        jsonOutput(array('success' => false, 'error' => 'Database query error'), 500);
+        return;
+    }
     bindDynamicParams($countStmt, $types, $params);
     $countStmt->execute();
     $total = (int)$countStmt->get_result()->fetch_assoc()['total'];
@@ -135,6 +157,10 @@ try {
     $dataParams[] = $offset;
 
     $stmt = $conn->prepare($dataQuery);
+    if (!$stmt) {
+        jsonOutput(array('success' => false, 'error' => 'Database query error'), 500);
+        return;
+    }
     bindDynamicParams($stmt, $dataTypes, $dataParams);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -143,6 +169,7 @@ try {
     while ($row = $result->fetch_assoc()) {
         $employees[] = array(
             'employee_id' => (string)$row['emp_id'],
+            'id' => (int)$row['emp_id'],
             'full_name' => $row['full_name'],
             'mobile_number' => $row['mobile_number'],
             'email' => isset($row['email']) ? $row['email'] : '',
