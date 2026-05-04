@@ -27,7 +27,6 @@ jobs:
               set net:timeout 30;
               set net:max-retries 3;
               open -u '${{ secrets.FTP_USER }},${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
-              cd domains/join.rcsfacility.com/public_html;
               lcd api;
               mirror -R --no-symlinks --parallel=4 --no-perms --overwrite;
               quit
@@ -64,7 +63,7 @@ jobs:
             set net:timeout 30;
             set net:max-retries 3;
             open -u '${{ secrets.FTP_USER }},${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
-            cd domains/join.rcsfacility.com/public_html/api/ess;
+            cd api/ess;
             lcd deploy_api_ess;
             put .htaccess;
             quit
