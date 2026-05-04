@@ -175,14 +175,14 @@ function requireAuth(): string
         jsonOutput(['success' => false, 'error' => 'Invalid or expired token'], 401);
     }
 
-    return $payload['employee_id'] ?? '';
+    return (string)($payload['employee_id'] ?? '');
 }
 
 // ─── Database Connection ──────────────────────────────────────────────────────
 /**
  * Create and return a mysqli connection
  */
-function getDbConnection(): mysqli
+function getDbConnection()
 {
     mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
     $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
@@ -211,7 +211,7 @@ function getEmployeeRole(mysqli $conn, string $employeeId): ?string
 /**
  * Get team members (employees under the same manager/unit)
  */
-function getTeamMembers(mysqli $conn, string $employeeId): array
+function getTeamMembers($conn, $employeeId)
 {
     // First, get the employee's unit and client info
     $stmt = $conn->prepare('SELECT unit_id, client_id FROM ess_employee_cache WHERE employee_id = ?');
