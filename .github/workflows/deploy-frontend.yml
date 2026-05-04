@@ -30,88 +30,17 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y lftp
 
       - name: Deploy frontend via FTP
-        env:
-          LFTP_PW: ${{ secrets.FTP_PASS }}
         run: |
-          lftp -u '${{ secrets.FTP_USER }},${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }} << 'EOF'
-          set ftp:ssl-allow no
-          set ftp:passive-mode on
-          set ftp:sync-mode off
-          set net:timeout 60
-          set net:max-retries 5
-          set net:reconnect-interval-base 5
-          set net:reconnect-interval-multiplier 2
-          set net:connection-limit 2
-          set mirror:parallel-transfer-count 2
-          set mirror:use-pget-n 2
-          lcd dist
-          mirror -R --no-symlinks --no-perms --overwrite --verbose=1
-          quit
-          EOF
+          lftp -c "
+            set ftp:ssl-allow no;
+            set ftp:passive-mode on;
+            set net:timeout 60;
+            set net:max-retries 5;
+            set net:reconnect-interval-base 5;
+            set net:reconnect-interval-multiplier 2;
+            open -u '${{ secrets.FTP_USER }},${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
+            lcd dist;
+            mirror -R --no-symlinks --no-perms --overwrite;
+            quit
+          "
           echo "Frontend deployed successfully"
-
-      - name: Deploy root .htaccess
-        run: |
-          mkdir -p deploy_tmp
-          cat > deploy_tmp/.htaccess << 'HTACCESS'
-          # SPA fallback + cache control
-          RewriteEngine On
-
-          # Force HTTPS
-          RewriteCond %{HTTPS} off
-          RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-
-          # API requests pass through
-          RewriteRule ^api/(.*)$ api/$1 [QSA,L]
-
-          # SPA fallback
-          RewriteCond %{REQUEST_FILENAME} !-f
-          RewriteCond %{REQUEST_FILENAME} !-d
-          RewriteRule ^(.*)$ /index.html [QSA,L]
-
-          # HTML no cache
-          <IfModule mod_headers.c>
-              <FilesMatch "\.(html)$">
-                  Header set Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
-                  Header set Pragma "no-cache"
-              </FilesMatch>
-              <FilesMatch "\.(js|css)$">
-                  Header set Cache-Control "public, max-age=31536000, immutable"
-              </FilesMatch>
-              <FilesMatch "api/">
-                  Header set Cache-Control "no-store, no-cache, must-revalidate"
-                  Header set Access-Control-Allow-Origin "*"
-                  Header set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
-                  Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-API-KEY, X-Employee-ID"
-              </FilesMatch>
-          </IfModule>
-
-          # Gzip
-          <IfModule mod_deflate.c>
-              AddOutputFilterByType DEFLATE text/html text/css application/javascript application/json image/svg+xml
-          </IfModule>
-
-          # Security
-          <IfModule mod_headers.c>
-              Header set X-Content-Type-Options "nosniff"
-              Header set X-Frame-Options "SAMEORIGIN"
-              Header set X-XSS-Protection "1; mode=block"
-          </IfModule>
-          HTACCESS
-
-          lftp -u '${{ secrets.FTP_USER }},${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }} << 'EOF'
-          set ftp:ssl-allow no
-          set ftp:passive-mode on
-          set net:timeout 60
-          set net:max-retries 5
-          set net:reconnect-interval-base 5
-          set net:reconnect-interval-multiplier 2
-          lcd deploy_tmp
-          put .htaccess
-          quit
-          EOF
-          rm -rf deploy_tmp
-          echo ".htaccess deployed successfully"
-
-      - name: Done
-        run: echo "Frontend deployment completed"

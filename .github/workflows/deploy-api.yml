@@ -19,27 +19,17 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y lftp
 
       - name: Deploy API folder via FTP
-        env:
-          LFTP_PW: ${{ secrets.FTP_PASS }}
         run: |
-          if [ -d "api" ]; then
-            lftp -u '${{ secrets.FTP_USER }},${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }} << 'EOF'
-          set ftp:ssl-allow no
-          set ftp:passive-mode on
-          set ftp:sync-mode off
-          set net:timeout 60
-          set net:max-retries 5
-          set net:reconnect-interval-base 5
-          set net:reconnect-interval-multiplier 2
-          set net:connection-limit 2
-          set mirror:parallel-transfer-count 2
-          set mirror:use-pget-n 2
-          cd api/ess
-          lcd api/ess
-          mirror -R --no-symlinks --no-perms --overwrite --only-newer --verbose=1
-          quit
-          EOF
-            echo "API folder deployed successfully"
-          else
-            echo "No api/ folder found - skipping"
-          fi
+          lftp -c "
+            set ftp:ssl-allow no;
+            set ftp:passive-mode on;
+            set net:timeout 60;
+            set net:max-retries 5;
+            set net:reconnect-interval-base 5;
+            set net:reconnect-interval-multiplier 2;
+            open -u '${{ secrets.FTP_USER }},${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
+            lcd api;
+            mirror -R --no-symlinks --no-perms --overwrite;
+            quit
+          "
+          echo "API deployed successfully"
