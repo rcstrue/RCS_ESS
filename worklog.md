@@ -175,3 +175,39 @@ Stage Summary:
 - Deployment: dist/ + api/ deployed to ~/domains/join.rcsfacility.com/public_html/
 - .htaccess: SPA routing, cache-busting HTML, immutable hashed assets, CORS for API
 - Zero lint errors from ESS/API files
+
+---
+Task ID: 8
+Agent: Main Agent
+Task: Fix expenses.php 500 error (text/html response instead of JSON)
+
+Work Log:
+- Analyzed the 500 error: response was `text/html; charset=UTF-8` instead of `application/json`, meaning PHP was crashing with an uncaught error
+- Identified 9 root causes:
+  1. `catch (Exception $e)` doesn't catch `\Throwable` — PHP TypeErrors (from strict_types=1) extend `\Error`, not `\Exception`, resulting in HTML error pages
+  2. `requireAuth()` in config.php returned `$payload['employee_id'] ?? ''` without string cast — if JWT stores employee_id as integer (e.g., 4), strict_types=1 throws TypeError
+  3. POST `bind_param` type string was `sssddsssss` but `$type` (4th param) is string not double — correct: `ssssdsssss`
+  4. Spread operator `...$params` in `bind_param` can fail with variable param count
+  5. `SELECT` specified 16 columns that might not all exist in the table
+  6. No `return;` after validation `jsonOutput()` calls in POST handler
+  7. `_debug` info leaked in error responses
+  8. Strict type hints on `getDbConnection(): mysqli` and `getTeamMembers(mysqli, string)` could cause issues from non-strict callers
+  9. Monthly summary queries failure would crash the entire response
+- Rewrote expenses.php (370 lines):
+  - Changed `catch (Exception $e)` → `catch (\Throwable $e)`
+  - Added `safeBindParam()` helper using `call_user_func_array` for variable param count
+  - Changed to `SELECT *` with defensive `isset()` checks on all row access
+  - Wrapped monthly summary in try/catch so failure doesn't break response
+  - Fixed POST bind_param to `ssssdsssss` (correct types)
+  - Added `return;` after all validation jsonOutput calls
+  - All array() instead of [] for maximum PHP compatibility
+- Updated config.php:
+  - Added `(string)` cast in `requireAuth()` return
+  - Removed strict type hints from `getDbConnection()` and `getTeamMembers()`
+
+Stage Summary:
+- Root cause: combination of `declare(strict_types=1)` + untyped JWT employee_id + `catch(Exception)` instead of `catch(Throwable)`
+- The strict_types in config.php means `requireAuth()` (declared to return string) would throw TypeError if JWT stores employee_id as int
+- TypeError extends \Error (not \Exception), so old catch block never caught it → PHP returns HTML 500
+- Pushed as commit 2790b23 to GitHub
+- User needs to re-upload api/ess/expenses.php and api/ess/config.php to server
