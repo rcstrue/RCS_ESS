@@ -211,3 +211,30 @@ Stage Summary:
 - TypeError extends \Error (not \Exception), so old catch block never caught it → PHP returns HTML 500
 - Pushed as commit 2790b23 to GitHub
 - User needs to re-upload api/ess/expenses.php and api/ess/config.php to server
+
+---
+Task ID: 9
+Agent: Main Agent
+Task: Fix all ESS backend APIs to match actual database schema
+
+Work Log:
+- Identified that employees table has NO city column — city is on units table
+- Fixed employees.php: removed e.city references, added LEFT JOIN units u ON u.id = e.unit_id, city now from u.city
+- Fixed employees.php: team scope filter removed e.city = ? (no city column on employees)
+- Fixed filters.php: _handleProfile() — e.city AS emp_city replaced with u.city AS emp_city via units JOIN
+- Fixed filters.php: _handleEmployeeDirectory() — same fix, u.city from units table
+- Fixed filters.php: replaced [...$params] spread with array_merge() + bindDynamicParams()
+- Fixed login.php: added LEFT JOIN units u ON u.id = e.unit_id to fetch u.city AS unit_city, u.state AS unit_state
+- Fixed login.php: $city now from $employee['unit_city'] (from units JOIN), not $employee['city']
+- Fixed login.php: added return; after all validation jsonOutput calls
+- Fixed login.php: removed strict type hints from _trackFailedAttempt and _determineRole
+- Fixed config.php: added bindDynamicParams() as shared helper (was only in expenses.php)
+- Confirmed attendance.php, leaves.php, tasks.php, helpdesk.php, announcements.php, pin.php — these only query ess_* tables (not employees), no schema issues
+
+Stage Summary:
+- Root cause: ALL queries referencing e.city were failing with SQL error because employees table has no city column
+- city is stored on the units table (units.city), must JOIN to get it
+- Login was failing because $employee['city'] returned null for the cache
+- bindDynamicParams() moved to config.php as shared utility
+- 4 files modified: employees.php, filters.php, login.php, config.php
+- Pushed as commit 0405d68
