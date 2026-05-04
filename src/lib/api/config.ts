@@ -74,10 +74,17 @@ export async function apiRequest<T>(
     
     let data;
     if (contentType && contentType.includes('application/json')) {
+      if (!responseText.trim()) {
+        if (response.ok) {
+          return { data: null, error: null };
+        }
+        return { data: null, error: 'Empty server response. Please try again.' };
+      }
+
       try {
         data = JSON.parse(responseText);
       } catch {
-        console.error('Failed to parse JSON response:', responseText.substring(0, 200));
+        console.error(`Failed to parse JSON response for ${endpoint} (status ${response.status}):`, responseText.substring(0, 200));
         return { data: null, error: 'Invalid server response. Please try again.' };
       }
     } else {
@@ -171,10 +178,14 @@ export async function uploadBase64Image(
     
     let data;
     if (contentType && contentType.includes('application/json')) {
+      if (!responseText.trim()) {
+        return { url: null, error: 'Empty server response. Please try again.' };
+      }
+
       try {
         data = JSON.parse(responseText);
       } catch {
-        console.error('Failed to parse JSON response:', responseText.substring(0, 200));
+        console.error(`Failed to parse JSON response for /upload/base64 (status ${response.status}):`, responseText.substring(0, 200));
         return { url: null, error: 'Invalid server response. Please try again.' };
       }
     } else {
