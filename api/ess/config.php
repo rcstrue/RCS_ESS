@@ -4,6 +4,7 @@ declare(strict_types=1);
 /**
  * ESS API — Shared Configuration & Utilities
  * Employee Self Service application backend
+ * Last updated: 2025-05-04
  */
 
 // ─── Database Constants ───────────────────────────────────────────────────────
