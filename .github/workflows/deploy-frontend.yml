@@ -37,7 +37,7 @@ jobs:
             set net:timeout 30;
             set net:max-retries 3;
             open -u '${{ secrets.FTP_USER }},${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
-            cd public_html;
+            cd domains/join.rcsfacility.com/public_html;
             lcd dist;
             mirror -R --no-symlinks --parallel=4 --no-perms --overwrite;
             quit
@@ -99,7 +99,7 @@ jobs:
             set net:timeout 30;
             set net:max-retries 3;
             open -u '${{ secrets.FTP_USER }},${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
-            cd public_html;
+            cd domains/join.rcsfacility.com/public_html;
             lcd deploy_tmp;
             put .htaccess;
             quit
