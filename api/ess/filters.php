@@ -59,7 +59,6 @@ function _handleProfile(): void
             e.email,
             e.designation,
             e.department,
-            e.city AS emp_city,
             e.state AS emp_state,
             e.date_of_joining,
             e.employee_code,
@@ -75,9 +74,11 @@ function _handleProfile(): void
             ec.unit_id,
             ec.unit_name,
             ec.client_name,
-            ec.client_id
+            ec.client_id,
+            u.city AS emp_city
         FROM employees e
         LEFT JOIN ess_employee_cache ec ON ec.employee_id = CAST(e.id AS CHAR)
+        LEFT JOIN units u ON u.id = e.unit_id
         WHERE e.id = ? AND e.status = ?
     ');
     $approvedStatus = 'approved';
@@ -413,13 +414,13 @@ function _handleEmployeeDirectory(): void
             e.department,
             e.employee_code,
             e.profile_pic_url,
-            e.city AS emp_city,
             e.state AS emp_state,
             e.date_of_joining,
             e.employee_role,
             e.status AS emp_status,
             c.name AS client_name,
-            u.name AS unit_name
+            u.name AS unit_name,
+            u.city AS emp_city
         FROM employees e
         LEFT JOIN clients c ON c.id = e.client_id
         LEFT JOIN units u ON u.id = e.unit_id
@@ -429,10 +430,10 @@ function _handleEmployeeDirectory(): void
     ";
 
     $dataTypes = $types . 'ii';
-    $dataParams = [...$params, $limit, $offset];
+    $dataParams = array_merge($params, array($limit, $offset));
 
     $stmt = $conn->prepare($dataQuery);
-    $stmt->bind_param($dataTypes, ...$dataParams);
+    bindDynamicParams($stmt, $dataTypes, $dataParams);
     $stmt->execute();
     $result = $stmt->get_result();
 

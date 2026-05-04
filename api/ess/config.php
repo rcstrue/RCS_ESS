@@ -285,3 +285,16 @@ function getPaginationParams(): array
     $offset = ($page - 1) * $limit;
     return [$page, $limit, $offset];
 }
+
+// ─── Dynamic Bind Params Helper ─────────────────────────────────────────────
+/**
+ * Bind variable number of params using references (required by mysqli)
+ */
+function bindDynamicParams($stmt, $types, $params)
+{
+    $bindRefs = array($types);
+    foreach ($params as $k => $v) {
+        $bindRefs[] = &$params[$k];
+    }
+    call_user_func_array(array($stmt, 'bind_param'), $bindRefs);
+}

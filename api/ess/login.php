@@ -6,9 +6,8 @@
 
 require_once __DIR__ . '/config.php';
 
-// Only POST allowed
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    jsonOutput(['success' => false, 'error' => 'Method not allowed. Use POST.'], 405);
+    jsonOutput(array('success' => false, 'error' => 'Method not allowed. Use POST.'), 405);
 }
 
 try {
@@ -18,45 +17,38 @@ try {
     $mobile = trim($input['mobile_number'] ?? '');
     $pin = trim($input['pin'] ?? '');
 
-    // ─── Input Validation ─────────────────────────────────────────────────
     if (empty($mobile)) {
-        jsonOutput(['success' => false, 'error' => 'Mobile number is required'], 400);
+        jsonOutput(array('success' => false, 'error' => 'Mobile number is required'), 400);
+        return;
     }
     if (empty($pin) || !preg_match('/^\d{4,10}$/', $pin)) {
-        jsonOutput(['success' => false, 'error' => 'Invalid PIN format'], 400);
+        jsonOutput(array('success' => false, 'error' => 'Invalid PIN format'), 400);
+        return;
     }
 
-    // ─── Rate Limiting (file-based, 5 attempts per 60s per mobile+IP) ────
+    // ─── Rate Limiting ───────────────────────────────────────────────────
     $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
     $rateKey = md5('ess_login_' . $mobile . '_' . $ip);
     $rateFile = sys_get_temp_dir() . '/' . $rateKey . '.json';
 
-    $rateData = ['attempts' => 0, 'last_attempt' => 0];
+    $rateData = array('attempts' => 0, 'last_attempt' => 0);
     if (file_exists($rateFile)) {
         $rateData = json_decode(file_get_contents($rateFile), true) ?: $rateData;
     }
-
-    $windowStart = time() - 60;
-    // Reset counter if window expired
-    if ($rateData['last_attempt'] < $windowStart) {
-        $rateData = ['attempts' => 0, 'last_attempt' => 0];
+    if ($rateData['last_attempt'] < time() - 60) {
+        $rateData = array('attempts' => 0, 'last_attempt' => 0);
     }
-
     if ($rateData['attempts'] >= 5) {
         $retryAfter = 60 - (time() - $rateData['last_attempt']);
-        jsonOutput([
-            'success' => false,
-            'error' => 'Too many login attempts. Please try again later.',
-            'retry_after_seconds' => max(0, $retryAfter)
-        ], 429);
+        jsonOutput(array('success' => false, 'error' => 'Too many attempts. Try later.', 'retry_after_seconds' => max(0, $retryAfter)), 429);
+        return;
     }
 
-    // ─── Database Lookup ──────────────────────────────────────────────────
+    // ─── Database Lookup — JOIN units for city ───────────────────────────
     $conn = getDbConnection();
 
-    // Find employee by mobile number with approved status
     $stmt = $conn->prepare('
-        SELECT e.*, c.name AS client_name, c.client_code, u.name AS unit_name
+        SELECT e.*, c.name AS client_name, c.client_code, u.name AS unit_name, u.city AS unit_city, u.state AS unit_state
         FROM employees e
         LEFT JOIN clients c ON c.id = e.client_id
         LEFT JOIN units u ON u.id = e.unit_id
@@ -71,39 +63,46 @@ try {
 
     if (!$employee) {
         _trackFailedAttempt($rateFile, $rateData);
-        jsonOutput(['success' => false, 'error' => 'Invalid mobile number or PIN'], 401);
+        jsonOutput(array('success' => false, 'error' => 'Invalid mobile number or PIN'), 401);
+        return;
     }
 
     // ─── PIN Validation ───────────────────────────────────────────────────
     $storedPin = $employee['pin'];
     $validPin = false;
 
-    // Check stored PIN first
     if (!empty($storedPin) && $storedPin === $pin) {
         $validPin = true;
     }
-
-    // Fallback: check if PIN matches last 4 digits of birth year
     if (!$validPin && !empty($employee['date_of_birth'])) {
-        $birthYear = substr($employee['date_of_birth'], 0, 4);
-        if ($birthYear === $pin) {
+        if (substr($employee['date_of_birth'], 0, 4) === $pin) {
             $validPin = true;
         }
     }
-
     if (!$validPin) {
         _trackFailedAttempt($rateFile, $rateData);
-        jsonOutput(['success' => false, 'error' => 'Invalid mobile number or PIN'], 401);
+        jsonOutput(array('success' => false, 'error' => 'Invalid mobile number or PIN'), 401);
+        return;
     }
 
-    // ─── Determine Role ───────────────────────────────────────────────────
     $role = _determineRole($employee);
-
-    // ─── Update Employee Cache ────────────────────────────────────────────
     $employeeId = (string)$employee['id'];
     $hasCustomPin = ($employee['has_custom_pin'] ?? 0) == 1 ? 1 : 0;
 
-    // Upsert into ess_employee_cache
+    // ─── Update Employee Cache ───────────────────────────────────────────
+    // Column order: employee_id(s), role(s), unit_id(i), unit_name(s), city(s), state(s),
+    //               client_name(s), client_id(i), full_name(s), mobile_number(s),
+    //               designation(s), profile_pic_url(s), pin(s), employee_code(s)
+    $unitName = $employee['unit_name'] ?? '';
+    $clientName = $employee['client_name'] ?? '';
+    $city = isset($employee['unit_city']) ? $employee['unit_city'] : '';
+    $state = isset($employee['unit_state']) ? $employee['unit_state'] : '';
+    $profilePicUrl = $employee['profile_pic_url'] ?? '';
+    $designation = $employee['designation'] ?? '';
+    $employeeCode = $employee['employee_code'] ?? '';
+    $clientId = (int)($employee['client_id'] ?? 0);
+    $unitId = (int)($employee['unit_id'] ?? 0);
+
     $cacheStmt = $conn->prepare('
         INSERT INTO ess_employee_cache (
             employee_id, role, unit_id, unit_name, city, state,
@@ -125,17 +124,6 @@ try {
             pin = VALUES(pin),
             employee_code = VALUES(employee_code)
     ');
-
-    $unitName = $employee['unit_name'] ?? '';
-    $clientName = $employee['client_name'] ?? '';
-    $city = $employee['city'] ?? '';
-    $state = $employee['state'] ?? '';
-    $profilePicUrl = $employee['profile_pic_url'] ?? '';
-    $designation = $employee['designation'] ?? '';
-    $employeeCode = $employee['employee_code'] ?? '';
-    $clientId = (int)($employee['client_id'] ?? 0);
-    $unitId = (int)($employee['unit_id'] ?? 0);
-
     $cacheStmt->bind_param('ssissssissssssi',
         $employeeId, $role, $unitId, $unitName, $city, $state,
         $clientName, $clientId, $employee['full_name'], $employee['mobile_number'],
@@ -145,83 +133,58 @@ try {
     $cacheStmt->close();
 
     // ─── Generate JWT ─────────────────────────────────────────────────────
-    $token = SimpleJWT::encode([
+    $token = SimpleJWT::encode(array(
         'employee_id' => $employeeId,
         'role' => $role,
         'full_name' => $employee['full_name']
-    ], 86400); // 24 hours
+    ), 86400);
 
-    // ─── Clear Rate Limit File on Success ─────────────────────────────────
     @unlink($rateFile);
 
-    // ─── Return Response ──────────────────────────────────────────────────
-    $employeeData = [
-        'employee_id' => $employeeId,
-        'full_name' => $employee['full_name'],
-        'mobile_number' => $employee['mobile_number'],
-        'email' => $employee['email'] ?? '',
-        'designation' => $employee['designation'] ?? '',
-        'department' => $employee['department'] ?? '',
-        'employee_code' => $employeeCode,
-        'role' => $role,
-        'has_custom_pin' => $hasCustomPin,
-        'profile_pic_url' => $profilePicUrl,
-        'city' => $city,
-        'state' => $state,
-        'unit_name' => $unitName,
-        'client_name' => $clientName,
-        'date_of_joining' => $employee['date_of_joining'] ?? '',
-    ];
-
-    jsonOutput([
+    jsonOutput(array(
         'success' => true,
-        'data' => [
-            'employee' => $employeeData,
+        'data' => array(
+            'employee' => array(
+                'employee_id' => $employeeId,
+                'full_name' => $employee['full_name'],
+                'mobile_number' => $employee['mobile_number'],
+                'email' => isset($employee['email']) ? $employee['email'] : '',
+                'designation' => $designation,
+                'department' => isset($employee['department']) ? $employee['department'] : '',
+                'employee_code' => $employeeCode,
+                'role' => $role,
+                'has_custom_pin' => $hasCustomPin,
+                'profile_pic_url' => $profilePicUrl,
+                'city' => $city,
+                'state' => $state,
+                'unit_name' => $unitName,
+                'client_name' => $clientName,
+                'date_of_joining' => isset($employee['date_of_joining']) ? $employee['date_of_joining'] : '',
+            ),
             'role' => $role,
             'token' => $token
-        ]
-    ]);
+        )
+    ));
 
 } catch (\Throwable $e) {
-    jsonOutput(['success' => false, 'error' => 'Server error: ' . $e->getMessage() . ' in ' . basename($e->getFile()) . ':' . $e->getLine()], 500);
+    jsonOutput(array('success' => false, 'error' => 'Server error: ' . $e->getMessage() . ' in ' . basename($e->getFile()) . ':' . $e->getLine()), 500);
 }
 
-// ─── Helper Functions ─────────────────────────────────────────────────────────
-
-/**
- * Track a failed login attempt
- */
-function _trackFailedAttempt(string $rateFile, array $rateData): void
+function _trackFailedAttempt($rateFile, $rateData): void
 {
     $rateData['attempts']++;
     $rateData['last_attempt'] = time();
     @file_put_contents($rateFile, json_encode($rateData), LOCK_EX);
 }
 
-/**
- * Determine employee role based on employee_role and worker_category
- */
-function _determineRole(array $employee): string
+function _determineRole($employee): string
 {
-    $employeeRole = strtolower($employee['employee_role'] ?? '');
     $appRole = strtolower($employee['app_role'] ?? '');
+    $employeeRole = strtolower($employee['employee_role'] ?? '');
     $workerCategory = strtolower($employee['worker_category'] ?? '');
 
-    // Check app_role first (most specific)
-    if (in_array($appRole, ['manager', 'regional_manager'])) {
-        return $appRole;
-    }
-
-    // Check employee_role
-    if (in_array($employeeRole, ['admin', 'manager'])) {
-        return $employeeRole;
-    }
-
-    // Check worker_category for supervisor roles
-    if (strpos($workerCategory, 'supervisor') !== false) {
-        return 'supervisor';
-    }
-
-    // Default
+    if (in_array($appRole, array('manager', 'regional_manager'))) return $appRole;
+    if (in_array($employeeRole, array('admin', 'manager'))) return $employeeRole;
+    if (strpos($workerCategory, 'supervisor') !== false) return 'supervisor';
     return 'employee';
 }

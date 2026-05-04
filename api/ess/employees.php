@@ -11,7 +11,7 @@
 require_once __DIR__ . '/config.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    jsonOutput(['success' => false, 'error' => 'Method not allowed. Use GET.'], 405);
+    jsonOutput(array('success' => false, 'error' => 'Method not allowed. Use GET.'), 405);
 }
 
 try {
@@ -20,199 +20,156 @@ try {
     $employeeId = requireAuth();
     $conn = getDbConnection();
 
-    // Query params
     $scope = $_GET['scope'] ?? 'all';
     $search = trim($_GET['q'] ?? '');
     $clientId = $_GET['client_id'] ?? '';
     $unitId = $_GET['unit_id'] ?? '';
     $department = $_GET['department'] ?? '';
-    [$page, $limit, $offset] = getPaginationParams();
+    list($page, $limit, $offset) = getPaginationParams();
 
     // ─── Build Base Query ─────────────────────────────────────────────────
     $whereClause = 'WHERE e.status = ?';
     $types = 's';
-    $params = [$approvedStatus = 'approved'];
+    $params = array('approved');
 
     // Scope-based filtering
-    switch ($scope) {
-        case 'team':
-            // Find employee's unit and client from cache
-            $cacheStmt = $conn->prepare('
-                SELECT unit_id, client_id, city, state FROM ess_employee_cache WHERE employee_id = ?
-            ');
+    if ($scope === 'team') {
+        $cacheStmt = $conn->prepare('SELECT unit_id, client_id FROM ess_employee_cache WHERE employee_id = ?');
+        $cacheStmt->bind_param('s', $employeeId);
+        $cacheStmt->execute();
+        $cacheData = $cacheStmt->get_result()->fetch_assoc();
+        $cacheStmt->close();
+
+        if ($cacheData) {
+            $teamWhere = '';
+            $teamTypes = '';
+            $teamParams = array();
+
+            if (!empty($cacheData['unit_id'])) {
+                $teamWhere .= 'e.unit_id = ?';
+                $teamTypes .= 'i';
+                $teamParams[] = (int)$cacheData['unit_id'];
+            }
+            if (!empty($cacheData['client_id'])) {
+                if (!empty($teamWhere)) $teamWhere .= ' OR ';
+                $teamWhere .= 'e.client_id = ?';
+                $teamTypes .= 'i';
+                $teamParams[] = (int)$cacheData['client_id'];
+            }
+
+            if (!empty($teamWhere)) {
+                $whereClause .= " AND ({$teamWhere})";
+                $types .= $teamTypes;
+                $params = array_merge($params, $teamParams);
+            }
+        }
+    } elseif ($scope === 'unit') {
+        if (empty($unitId)) {
+            $cacheStmt = $conn->prepare('SELECT unit_id FROM ess_employee_cache WHERE employee_id = ?');
             $cacheStmt->bind_param('s', $employeeId);
             $cacheStmt->execute();
             $cacheData = $cacheStmt->get_result()->fetch_assoc();
             $cacheStmt->close();
-
-            if ($cacheData) {
-                // Build OR conditions for team scope
-                $teamWhere = '';
-                $teamTypes = '';
-                $teamParams = [];
-
-                if (!empty($cacheData['unit_id'])) {
-                    $teamWhere .= 'e.unit_id = ?';
-                    $teamTypes .= 'i';
-                    $teamParams[] = (int)$cacheData['unit_id'];
-                }
-
-                if (!empty($cacheData['client_id'])) {
-                    if (!empty($teamWhere)) {
-                        $teamWhere .= ' OR ';
-                    }
-                    $teamWhere .= 'e.client_id = ?';
-                    $teamTypes .= 'i';
-                    $teamParams[] = (int)$cacheData['client_id'];
-                }
-
-                if (!empty($cacheData['city'])) {
-                    if (!empty($teamWhere)) {
-                        $teamWhere .= ' OR ';
-                    }
-                    $teamWhere .= 'e.city = ?';
-                    $teamTypes .= 's';
-                    $teamParams[] = $cacheData['city'];
-                }
-
-                if (!empty($teamWhere)) {
-                    $whereClause .= " AND ({$teamWhere})";
-                    $types .= $teamTypes;
-                    $params = array_merge($params, $teamParams);
-                }
-            }
-            break;
-
-        case 'unit':
-            // Only show employees in same unit
-            if (empty($unitId)) {
-                // Get current employee's unit
-                $cacheStmt = $conn->prepare('SELECT unit_id FROM ess_employee_cache WHERE employee_id = ?');
-                $cacheStmt->bind_param('s', $employeeId);
-                $cacheStmt->execute();
-                $cacheData = $cacheStmt->get_result()->fetch_assoc();
-                $cacheStmt->close();
-
-                if (!empty($cacheData['unit_id'])) {
-                    $whereClause .= ' AND e.unit_id = ?';
-                    $types .= 'i';
-                    $params[] = (int)$cacheData['unit_id'];
-                }
-            } else {
+            if (!empty($cacheData['unit_id'])) {
                 $whereClause .= ' AND e.unit_id = ?';
                 $types .= 'i';
-                $params[] = (int)$unitId;
+                $params[] = (int)$cacheData['unit_id'];
             }
-            break;
-
-        case 'all':
-        default:
-            // No additional scope restrictions
-            break;
+        } else {
+            $whereClause .= ' AND e.unit_id = ?';
+            $types .= 'i';
+            $params[] = (int)$unitId;
+        }
     }
 
-    // Additional filters
     if (!empty($search)) {
         $whereClause .= ' AND (e.full_name LIKE ? OR e.employee_code LIKE ? OR e.mobile_number LIKE ? OR e.designation LIKE ?)';
         $types .= 'ssss';
         $searchTerm = '%' . $search . '%';
-        $params = array_merge($params, [$searchTerm, $searchTerm, $searchTerm, $searchTerm]);
+        $params = array_merge($params, array($searchTerm, $searchTerm, $searchTerm, $searchTerm));
     }
-
     if (!empty($clientId)) {
         $whereClause .= ' AND e.client_id = ?';
         $types .= 'i';
         $params[] = (int)$clientId;
     }
-
     if (!empty($unitId)) {
         $whereClause .= ' AND e.unit_id = ?';
         $types .= 'i';
         $params[] = (int)$unitId;
     }
-
     if (!empty($department)) {
         $whereClause .= ' AND e.department = ?';
         $types .= 's';
         $params[] = $department;
     }
 
-    // ─── Count Query ──────────────────────────────────────────────────────
+    // ─── Count ───────────────────────────────────────────────────────────
     $countQuery = "SELECT COUNT(*) AS total FROM employees e {$whereClause}";
     $countStmt = $conn->prepare($countQuery);
-    if (!empty($params)) {
-        $countStmt->bind_param($types, ...$params);
-    }
+    bindDynamicParams($countStmt, $types, $params);
     $countStmt->execute();
     $total = (int)$countStmt->get_result()->fetch_assoc()['total'];
     $countStmt->close();
 
-    // ─── Data Query with JOINs (table aliases for ALL columns) ────────────
+    // ─── Data Query — city/state from units table ────────────────────────
     $dataQuery = "
         SELECT
-            e.id AS emp_id,
-            e.full_name,
-            e.mobile_number,
-            e.email,
-            e.designation,
-            e.department,
-            e.employee_code,
-            e.profile_pic_url,
-            e.city AS emp_city,
-            e.state AS emp_state,
-            e.date_of_joining,
-            e.employee_role,
-            e.app_role,
+            e.id AS emp_id, e.full_name, e.mobile_number, e.email,
+            e.designation, e.department, e.employee_code, e.profile_pic_url,
+            e.state AS emp_state, e.date_of_joining, e.employee_role, e.app_role,
             e.status AS emp_status,
             c.name AS client_name,
-            u.name AS unit_name
+            u.name AS unit_name,
+            u.city AS emp_city
         FROM employees e
-        LEFT JOIN clients c ON c.id = e.client_id AND c.is_active = 1
-        LEFT JOIN units u ON u.id = e.unit_id AND u.is_active = 1
+        LEFT JOIN clients c ON c.id = e.client_id
+        LEFT JOIN units u ON u.id = e.unit_id
         {$whereClause}
         ORDER BY e.full_name ASC
         LIMIT ? OFFSET ?
     ";
-
     $dataTypes = $types . 'ii';
-    $dataParams = array_merge($params, [$limit, $offset]);
+    $dataParams = $params;
+    $dataParams[] = $limit;
+    $dataParams[] = $offset;
 
     $stmt = $conn->prepare($dataQuery);
-    $stmt->bind_param($dataTypes, ...$dataParams);
+    bindDynamicParams($stmt, $dataTypes, $dataParams);
     $stmt->execute();
     $result = $stmt->get_result();
 
-    $employees = [];
+    $employees = array();
     while ($row = $result->fetch_assoc()) {
-        $employees[] = [
+        $employees[] = array(
             'employee_id' => (string)$row['emp_id'],
             'full_name' => $row['full_name'],
             'mobile_number' => $row['mobile_number'],
-            'email' => $row['email'] ?? '',
-            'designation' => $row['designation'] ?? '',
-            'department' => $row['department'] ?? '',
-            'employee_code' => $row['employee_code'] ?? '',
-            'profile_pic_url' => $row['profile_pic_url'] ?? '',
-            'city' => $row['emp_city'] ?? '',
-            'state' => $row['emp_state'] ?? '',
-            'date_of_joining' => $row['date_of_joining'] ?? '',
-            'employee_role' => $row['employee_role'] ?? '',
-            'app_role' => $row['app_role'] ?? '',
-            'status' => $row['emp_status'] ?? '',
-            'client_name' => $row['client_name'] ?? '',
-            'unit_name' => $row['unit_name'] ?? '',
-        ];
+            'email' => isset($row['email']) ? $row['email'] : '',
+            'designation' => isset($row['designation']) ? $row['designation'] : '',
+            'department' => isset($row['department']) ? $row['department'] : '',
+            'employee_code' => isset($row['employee_code']) ? $row['employee_code'] : '',
+            'profile_pic_url' => isset($row['profile_pic_url']) ? $row['profile_pic_url'] : '',
+            'city' => isset($row['emp_city']) ? $row['emp_city'] : '',
+            'state' => isset($row['emp_state']) ? $row['emp_state'] : '',
+            'date_of_joining' => isset($row['date_of_joining']) ? $row['date_of_joining'] : '',
+            'employee_role' => isset($row['employee_role']) ? $row['employee_role'] : '',
+            'app_role' => isset($row['app_role']) ? $row['app_role'] : '',
+            'status' => isset($row['emp_status']) ? $row['emp_status'] : '',
+            'client_name' => isset($row['client_name']) ? $row['client_name'] : '',
+            'unit_name' => isset($row['unit_name']) ? $row['unit_name'] : '',
+        );
     }
     $stmt->close();
 
-    jsonOutput([
+    jsonOutput(array(
         'success' => true,
-        'data' => [
-            'items' => $employees,
-            ...buildPagination($total, $page, $limit)
-        ]
-    ]);
+        'data' => array_merge(
+            array('items' => $employees),
+            buildPagination($total, $page, $limit)
+        )
+    ));
 
 } catch (\Throwable $e) {
-    jsonOutput(['success' => false, 'error' => 'Server error: ' . $e->getMessage() . ' in ' . basename($e->getFile()) . ':' . $e->getLine()], 500);
+    jsonOutput(array('success' => false, 'error' => 'Server error: ' . $e->getMessage() . ' in ' . basename($e->getFile()) . ':' . $e->getLine()), 500);
 }
