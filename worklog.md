@@ -238,3 +238,74 @@ Stage Summary:
 - bindDynamicParams() moved to config.php as shared utility
 - 4 files modified: employees.php, filters.php, login.php, config.php
 - Pushed as commit 0405d68
+
+---
+Task ID: 10
+Agent: Main Agent
+Task: Fix ESS backend APIs to match actual database schema — 8 issues (login field mismatch, custom PIN flow, expense types, role filters, has_custom_pin)
+
+Work Log:
+- Verified actual database schema from SQL dump (rcsfaxhz_bolt.sql)
+- Key schema facts:
+  - employees table: NO `city` column, NO `has_custom_pin` column, HAS `pin` varchar(10)
+  - ess_employee_cache: HAS `pin` varchar(4) (null = use birth year), NO `manager_id` column
+  - ess_expenses: `category` enum('advance','expense','employee_advance'), `type` enum('travel','food','cab','supplies','medical','other')
+
+Fixed login.php:
+  - Accept both `mobile_number` and `mobileNumber` field names from frontend
+  - PIN validation: check ess_employee_cache.pin first (custom PIN), then birth year from employees.date_of_birth
+  - has_custom_pin determined by whether ess_employee_cache.pin is NOT NULL
+  - Removed pin from INSERT/UPDATE of ess_employee_cache (set only by change-pin endpoint)
+  - Added `id` field to employee response for frontend session storage
+  - Added `if (!$stmt)` safety checks on all prepare() calls
+  - Explicit column list instead of `SELECT e.*` to avoid referencing non-existent columns
+
+Fixed pin.php:
+  - Removed `UPDATE employees SET pin = ?, has_custom_pin = 1` (has_custom_pin column doesn't exist!)
+  - Only updates ess_employee_cache.pin (not employees table)
+  - Added `is_first_login` flag support — skips current PIN validation for first-time setup
+  - PIN limited to 4 digits (matches varchar(4) in ess_employee_cache)
+  - Fallback: validates current_pin against cache.pin first, then birth year
+
+Fixed expenses.php:
+  - Removed hardcoded type validation (`'advance', 'expense'`) — type values come from DB enum
+  - Removed hardcoded category validation — let DB enum constraint handle it
+  - Added `view=types` endpoint: reads available categories and types from DB enum via SHOW COLUMNS
+  - Added `if (!$stmt)` safety checks on all prepare() calls
+  - Monthly summary uses `category` field instead of `type` field (correct mapping)
+
+Fixed employees.php:
+  - Added `role_filter` query parameter: 'all' (default), 'managers', 'admin'
+  - 'managers': WHERE employee_role IN ('manager') OR app_role IN ('manager', 'regional_manager')
+  - 'admin': WHERE employee_role = 'admin'
+  - Added `id` field to response items
+  - Added `if (!$stmt)` safety checks on all prepare() calls
+
+Fixed filters.php:
+  - Replaced `e.has_custom_pin` with `ec.pin AS cache_pin` (column doesn't exist in employees table)
+  - has_custom_pin status now determined by: ec.pin IS NOT NULL
+
+Fixed ess-api.ts:
+  - Login: changed `{ mobileNumber, pin }` to `{ mobile_number: mobileNumber, pin }` (fixes "Mobile number is required" error)
+  - changePin: added `is_first_login: boolean = false` parameter
+  - Added `fetchExpenseTypes()` API function for reading expense types/categories from DB
+
+Fixed ForceChangePin.tsx:
+  - Added `isFirstLogin` prop
+  - When isFirstLogin=true: skips "Current PIN" step, shows only "New PIN" → "Confirm" (2 steps)
+  - When isFirstLogin=false: shows full "Current PIN" → "New PIN" → "Confirm" (3 steps)
+  - Passes `is_first_login: true` to changePin API on first login
+
+Fixed ESSApp.tsx:
+  - Added `isFirstLogin` state
+  - Passes `isFirstLogin` prop to ForceChangePin component
+  - Resets isFirstLogin on PIN change completion
+
+Stage Summary:
+- 8 files modified: login.php, pin.php, expenses.php, employees.php, filters.php, ess-api.ts, ForceChangePin.tsx, ESSApp.tsx
+- Login field name mismatch was the ROOT CAUSE of "Mobile number is required" error
+- Custom PIN flow: birth year login → force PIN change → save to cache → use cache PIN for future logins
+- Expense types now come from database enum (can be changed via ALTER TABLE without code changes)
+- Employee directory supports role filtering (all/managers/admin)
+- has_custom_pin removed from all employees table references (column doesn't exist)
+- Zero ESLint errors from ESS files

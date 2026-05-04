@@ -45,7 +45,7 @@ function unwrap<T>(result: Promise<{ data: T | null; error: string | null }>): P
 export async function essLogin(mobileNumber: string, pin: string) {
   return apiRequest<LoginResponse>('/ess/login', {
     method: 'POST',
-    body: JSON.stringify({ mobileNumber, pin }),
+    body: JSON.stringify({ mobile_number: mobileNumber, pin }),
   }).then((res) => {
     if (res.error) return res;
     const d = res.data as Record<string, unknown> | null;
@@ -66,10 +66,10 @@ export async function essLogin(mobileNumber: string, pin: string) {
   });
 }
 
-export async function changePin(employee_id: number, current_pin: string, new_pin: string) {
+export async function changePin(employee_id: number, current_pin: string, new_pin: string, is_first_login: boolean = false) {
   return unwrap(apiRequest('/ess/pin', {
     method: 'POST',
-    body: JSON.stringify({ employee_id, current_pin, new_pin }),
+    body: JSON.stringify({ employee_id, current_pin, new_pin, is_first_login }),
   }));
 }
 
@@ -151,6 +151,10 @@ export async function fetchExpenses(employee_id: number, status?: string) {
 
 export async function fetchPendingTeamExpenses() {
   return unwrap<{ items: Expense[] }>(apiRequest<{ items: Expense[] }>('/ess/expenses?view=pending_team'));
+}
+
+export async function fetchExpenseTypes() {
+  return unwrap<{ categories: string[]; types: string[] }>(apiRequest<{ categories: string[]; types: string[] }>('/ess/expenses?view=types'));
 }
 
 export async function createExpense(data: { employee_id: number; type: string; amount: number; expense_date: string; description?: string }) {

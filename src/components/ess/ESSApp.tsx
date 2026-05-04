@@ -41,6 +41,7 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
   // ── Auth ──
   const [session, setSession] = useState<ESSSession | null>(null);
   const [forcePinSession, setForcePinSession] = useState<ESSSession | null>(null);
+  const [isFirstLogin, setIsFirstLogin] = useState(false);
   const [authReady, setAuthReady] = useState(false);
 
   const loadSession = useCallback(() => {
@@ -90,10 +91,12 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
 
   const handleForcePinChange = useCallback((s: ESSSession) => {
     setForcePinSession(s);
+    setIsFirstLogin(true); // First login = birth year → force PIN setup
   }, []);
 
   const handleForcePinComplete = useCallback((s: ESSSession) => {
     setForcePinSession(null);
+    setIsFirstLogin(false);
     saveSession(s);
     toast.success(`Welcome, ${s.employee.full_name}!`);
   }, [saveSession]);
@@ -138,6 +141,7 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
         session={forcePinSession}
         onComplete={handleForcePinComplete}
         onLogout={clearSession}
+        isFirstLogin={isFirstLogin}
       />
     );
   }

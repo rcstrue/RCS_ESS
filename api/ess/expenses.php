@@ -2,8 +2,13 @@
 /**
  * ESS API — Expense Management Endpoint
  * GET:  List expenses with pagination, monthly summary, pending team
+ *       ?view=types — Get available expense types/categories from DB enum
  * POST: Create expense
  * PUT:  Approve/reject expense
+ *
+ * NOTE: Expense type values ('travel','food','cab','supplies','medical','other')
+ * come from the database enum and can be changed via ALTER TABLE.
+ * Category values ('advance','expense','employee_advance') are also from DB enum.
  */
 
 require_once __DIR__ . '/config.php';
@@ -33,7 +38,7 @@ try {
     ), 500);
 }
 
-// ─── GET: List Expenses ───────────────────────────────────────────────────────
+// ─── GET: List Expenses or Get Types ──────────────────────────────────────
 
 function handleGetExpenses(): void
 {
@@ -41,6 +46,12 @@ function handleGetExpenses(): void
     $conn = getDbConnection();
 
     $view = isset($_GET['view']) ? $_GET['view'] : '';
+
+    // ─── view=types: Return available categories and types from DB enum ──
+    if ($view === 'types') {
+        _handleExpenseTypes($conn);
+        return;
+    }
 
     if ($view === 'pending_team') {
         handlePendingTeamExpenses($authId);
@@ -86,6 +97,10 @@ function handleGetExpenses(): void
     // Count
     $countSql = "SELECT COUNT(*) AS cnt FROM ess_expenses {$where}";
     $countStmt = $conn->prepare($countSql);
+    if (!$countStmt) {
+        jsonOutput(array('success' => false, 'error' => 'Database query error'), 500);
+        return;
+    }
     bindDynamicParams($countStmt, $types, $values);
     $countStmt->execute();
     $total = (int)$countStmt->get_result()->fetch_assoc()['cnt'];
@@ -99,6 +114,10 @@ function handleGetExpenses(): void
     $dataValues[] = $offset;
 
     $stmt = $conn->prepare($dataSql);
+    if (!$stmt) {
+        jsonOutput(array('success' => false, 'error' => 'Database query error'), 500);
+        return;
+    }
     bindDynamicParams($stmt, $dataTypes, $dataValues);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -130,10 +149,14 @@ function handleGetExpenses(): void
     // Total amount
     $sumSql = "SELECT COALESCE(SUM(amount), 0) AS total_amount FROM ess_expenses {$where}";
     $sumStmt = $conn->prepare($sumSql);
-    bindDynamicParams($sumStmt, $types, $values);
-    $sumStmt->execute();
-    $totalAmount = (float)$sumStmt->get_result()->fetch_assoc()['total_amount'];
-    $sumStmt->close();
+    if ($sumStmt) {
+        bindDynamicParams($sumStmt, $types, $values);
+        $sumStmt->execute();
+        $totalAmount = (float)$sumStmt->get_result()->fetch_assoc()['total_amount'];
+        $sumStmt->close();
+    } else {
+        $totalAmount = 0;
+    }
 
     // Monthly summary (wrapped in try so failure doesn't kill the response)
     $monthSummary = array('advance_received' => 0, 'approved_expenses' => 0, 'balance' => 0);
@@ -141,17 +164,21 @@ function handleGetExpenses(): void
     if (preg_match('/^\d{4}-\d{2}$/', $currentMonth)) {
         try {
             $monthLike = $currentMonth . '%';
-            $advStmt = $conn->prepare("SELECT COALESCE(SUM(amount),0) AS t FROM ess_expenses WHERE employee_id = ? AND expense_date LIKE ? AND type = 'advance' AND status IN ('approved','reimbursed')");
-            $advStmt->bind_param('ss', $queryEmployeeId, $monthLike);
-            $advStmt->execute();
-            $monthSummary['advance_received'] = (float)$advStmt->get_result()->fetch_assoc()['t'];
-            $advStmt->close();
+            $advStmt = $conn->prepare("SELECT COALESCE(SUM(amount),0) AS t FROM ess_expenses WHERE employee_id = ? AND expense_date LIKE ? AND category = 'advance' AND status IN ('approved','reimbursed')");
+            if ($advStmt) {
+                $advStmt->bind_param('ss', $queryEmployeeId, $monthLike);
+                $advStmt->execute();
+                $monthSummary['advance_received'] = (float)$advStmt->get_result()->fetch_assoc()['t'];
+                $advStmt->close();
+            }
 
-            $expStmt = $conn->prepare("SELECT COALESCE(SUM(amount),0) AS t FROM ess_expenses WHERE employee_id = ? AND expense_date LIKE ? AND type = 'expense' AND status IN ('approved','reimbursed')");
-            $expStmt->bind_param('ss', $queryEmployeeId, $monthLike);
-            $expStmt->execute();
-            $monthSummary['approved_expenses'] = (float)$expStmt->get_result()->fetch_assoc()['t'];
-            $expStmt->close();
+            $expStmt = $conn->prepare("SELECT COALESCE(SUM(amount),0) AS t FROM ess_expenses WHERE employee_id = ? AND expense_date LIKE ? AND category = 'expense' AND status IN ('approved','reimbursed')");
+            if ($expStmt) {
+                $expStmt->bind_param('ss', $queryEmployeeId, $monthLike);
+                $expStmt->execute();
+                $monthSummary['approved_expenses'] = (float)$expStmt->get_result()->fetch_assoc()['t'];
+                $expStmt->close();
+            }
         } catch (\Throwable $e) {
             error_log('month_summary error: ' . $e->getMessage());
         }
@@ -169,7 +196,59 @@ function handleGetExpenses(): void
     ));
 }
 
-// ─── GET: Pending Team Expenses ──────────────────────────────────────────────
+// ─── GET: Expense Types from DB Enum ──────────────────────────────────────
+
+function _handleExpenseTypes($conn): void
+{
+    $types = array();
+    $categories = array();
+
+    // Read type enum values
+    try {
+        $stmt = $conn->prepare("SHOW COLUMNS FROM ess_expenses WHERE Field = 'type'");
+        if ($stmt) {
+            $stmt->execute();
+            $row = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+            if ($row && preg_match("/^enum\((.*)\)$/i", $row['Type'], $matches)) {
+                $vals = explode(',', $matches[1]);
+                foreach ($vals as $v) {
+                    $types[] = trim($v, "'\"");
+                }
+            }
+        }
+    } catch (\Throwable $e) {
+        error_log('expense_types error: ' . $e->getMessage());
+    }
+
+    // Read category enum values
+    try {
+        $stmt = $conn->prepare("SHOW COLUMNS FROM ess_expenses WHERE Field = 'category'");
+        if ($stmt) {
+            $stmt->execute();
+            $row = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+            if ($row && preg_match("/^enum\((.*)\)$/i", $row['Type'], $matches)) {
+                $vals = explode(',', $matches[1]);
+                foreach ($vals as $v) {
+                    $categories[] = trim($v, "'\"");
+                }
+            }
+        }
+    } catch (\Throwable $e) {
+        error_log('expense_categories error: ' . $e->getMessage());
+    }
+
+    jsonOutput(array(
+        'success' => true,
+        'data' => array(
+            'categories' => $categories,
+            'types' => $types,
+        )
+    ));
+}
+
+// ─── GET: Pending Team Expenses ──────────────────────────────────────────
 
 function handlePendingTeamExpenses($authId): void
 {
@@ -177,6 +256,10 @@ function handlePendingTeamExpenses($authId): void
 
     try {
         $cacheStmt = $conn->prepare('SELECT unit_id, client_id FROM ess_employee_cache WHERE employee_id = ?');
+        if (!$cacheStmt) {
+            jsonOutput(array('success' => true, 'data' => array('items' => array())));
+            return;
+        }
         $cacheStmt->bind_param('s', $authId);
         $cacheStmt->execute();
         $cache = $cacheStmt->get_result()->fetch_assoc();
@@ -207,6 +290,10 @@ function handlePendingTeamExpenses($authId): void
 
     try {
         $teamStmt = $conn->prepare($teamQuery);
+        if (!$teamStmt) {
+            jsonOutput(array('success' => true, 'data' => array('items' => array())));
+            return;
+        }
         bindDynamicParams($teamStmt, $teamTypes, $teamValues);
         $teamStmt->execute();
         $teamResult = $teamStmt->get_result();
@@ -229,6 +316,10 @@ function handlePendingTeamExpenses($authId): void
     $expQuery = "SELECT e.*, c.full_name AS employee_name FROM ess_expenses e LEFT JOIN ess_employee_cache c ON c.employee_id = e.employee_id WHERE e.employee_id IN ({$placeholders}) AND e.status = 'pending' ORDER BY e.created_at DESC LIMIT 100";
 
     $expStmt = $conn->prepare($expQuery);
+    if (!$expStmt) {
+        jsonOutput(array('success' => true, 'data' => array('items' => array())));
+        return;
+    }
     $expStmt->bind_param(str_repeat('s', count($teamIds)), ...$teamIds);
     $expStmt->execute();
     $result = $expStmt->get_result();
@@ -253,7 +344,7 @@ function handlePendingTeamExpenses($authId): void
     jsonOutput(array('success' => true, 'data' => array('items' => $expenses)));
 }
 
-// ─── POST: Create Expense ─────────────────────────────────────────────────────
+// ─── POST: Create Expense ─────────────────────────────────────────────────
 
 function handleCreateExpense(): void
 {
@@ -269,15 +360,14 @@ function handleCreateExpense(): void
     $billUrl     = trim(isset($input['bill_url']) ? $input['bill_url'] : '');
     $billType    = trim(isset($input['bill_type']) ? $input['bill_type'] : '');
 
-    $validCategories = array('advance', 'expense', 'employee_advance');
-    $validTypes = array('advance', 'expense');
-
-    if (empty($category) || !in_array($category, $validCategories)) {
-        jsonOutput(array('success' => false, 'error' => 'Invalid category. Allowed: ' . implode(', ', $validCategories)), 400);
+    // Validate required fields — type and category values come from DB enum,
+    // so we don't hardcode validation here. Let the DB enum constraint handle it.
+    if (empty($category)) {
+        jsonOutput(array('success' => false, 'error' => 'Category is required'), 400);
         return;
     }
-    if (empty($type) || !in_array($type, $validTypes)) {
-        jsonOutput(array('success' => false, 'error' => 'Invalid type. Allowed: ' . implode(', ', $validTypes)), 400);
+    if (empty($type)) {
+        jsonOutput(array('success' => false, 'error' => 'Expense type is required'), 400);
         return;
     }
     if ($amount <= 0) {
@@ -297,19 +387,26 @@ function handleCreateExpense(): void
     $managerId = null;
     try {
         $mgrStmt = $conn->prepare('SELECT manager_id FROM ess_employee_cache WHERE employee_id = ?');
-        $mgrStmt->bind_param('s', $employeeId);
-        $mgrStmt->execute();
-        $mgr = $mgrStmt->get_result()->fetch_assoc();
-        $mgrStmt->close();
-        if ($mgr && isset($mgr['manager_id'])) {
-            $managerId = $mgr['manager_id'];
+        if ($mgrStmt) {
+            $mgrStmt->bind_param('s', $employeeId);
+            $mgrStmt->execute();
+            $mgr = $mgrStmt->get_result()->fetch_assoc();
+            $mgrStmt->close();
+            if ($mgr && isset($mgr['manager_id'])) {
+                $managerId = $mgr['manager_id'];
+            }
         }
     } catch (\Throwable $e) {
         // not critical
     }
 
     // Insert — types: s=employee, s=manager, s=category, s=type, d=amount, s=desc, s=bill_url, s=bill_type, s=date, s=status
+    // NOTE: ess_employee_cache does NOT have manager_id column, so managerId will be null
     $stmt = $conn->prepare('INSERT INTO ess_expenses (employee_id, manager_id, category, type, amount, description, bill_url, bill_type, expense_date, status) VALUES (?,?,?,?,?,?,?,?,?,?)');
+    if (!$stmt) {
+        jsonOutput(array('success' => false, 'error' => 'Failed to create expense. Invalid category or type.'), 400);
+        return;
+    }
     $stmt->bind_param('ssssdsssss', $employeeId, $managerId, $category, $type, $amount, $description, $billUrl, $billType, $expenseDate, 'pending');
     $stmt->execute();
     $newId = $stmt->insert_id;
@@ -326,7 +423,7 @@ function handleCreateExpense(): void
     ));
 }
 
-// ─── PUT: Approve/Reject Expense ──────────────────────────────────────────────
+// ─── PUT: Approve/Reject Expense ──────────────────────────────────────────
 
 function handleUpdateExpense(): void
 {
@@ -353,6 +450,10 @@ function handleUpdateExpense(): void
     }
 
     $checkStmt = $conn->prepare('SELECT id, employee_id, status, amount FROM ess_expenses WHERE id = ?');
+    if (!$checkStmt) {
+        jsonOutput(array('success' => false, 'error' => 'Database error'), 500);
+        return;
+    }
     $checkStmt->bind_param('i', $expenseId);
     $checkStmt->execute();
     $expense = $checkStmt->get_result()->fetch_assoc();
@@ -371,6 +472,10 @@ function handleUpdateExpense(): void
     }
 
     $updateStmt = $conn->prepare('UPDATE ess_expenses SET status = ?, approved_by = ?, approved_at = NOW(), rejection_reason = ?, updated_at = NOW() WHERE id = ?');
+    if (!$updateStmt) {
+        jsonOutput(array('success' => false, 'error' => 'Database error'), 500);
+        return;
+    }
     $updateStmt->bind_param('sssi', $status, $approvedBy, $rejectionReason, $expenseId);
     $updateStmt->execute();
     $updateStmt->close();
@@ -379,18 +484,4 @@ function handleUpdateExpense(): void
         'success' => true,
         'data' => array('id' => $expenseId, 'status' => $status, 'approved_by' => $approvedBy, 'message' => "Expense {$status} successfully")
     ));
-}
-
-// ─── Helper: bind dynamic params by count ─────────────────────────────────────
-
-function bindDynamicParams($stmt, $types, $params)
-{
-    // Build reference array for call_user_func_array
-    // bind_param requires references in PHP — array_merge copies values
-    $bindRefs = array();
-    $bindRefs[] = $types;
-    foreach ($params as $k => $v) {
-        $bindRefs[] = &$params[$k];
-    }
-    call_user_func_array(array($stmt, 'bind_param'), $bindRefs);
 }

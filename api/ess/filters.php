@@ -51,6 +51,8 @@ function _handleProfile(): void
     $conn = getDbConnection();
 
     // Fetch employee profile with joins — USE TABLE ALIASES for ALL columns
+    // NOTE: employees table does NOT have has_custom_pin column.
+    // Custom PIN status is determined by: ec.pin IS NOT NULL
     $stmt = $conn->prepare('
         SELECT
             e.id AS employee_id,
@@ -68,9 +70,9 @@ function _handleProfile(): void
             e.employee_role,
             e.app_role,
             e.worker_category,
-            e.has_custom_pin,
             e.status AS emp_status,
             ec.role AS cache_role,
+            ec.pin AS cache_pin,
             ec.unit_id,
             ec.unit_name,
             ec.client_name,
