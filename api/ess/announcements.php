@@ -22,8 +22,8 @@ try {
         default:
             jsonOutput(['success' => false, 'error' => 'Method not allowed'], 405);
     }
-} catch (Exception $e) {
-    jsonOutput(['success' => false, 'error' => 'Internal server error'], 500);
+} catch (\Throwable $e) {
+    jsonOutput(['success' => false, 'error' => 'Server error: ' . $e->getMessage() . ' in ' . basename($e->getFile()) . ':' . $e->getLine()], 500);
 }
 
 // ─── GET: List Announcements ──────────────────────────────────────────────────

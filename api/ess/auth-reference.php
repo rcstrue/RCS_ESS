@@ -398,8 +398,8 @@ function validateToken(string $secret = null): ?object {
     try {
         $payload = JWT::decode($token, $secret, ['HS256']);
         return $payload;
-    } catch (Exception $e) {
-        error_log("JWT validation failed: " . $e->getMessage());
+    } catch (\Throwable $e) {
+        error_log("JWT validation failed: " . $e->getMessage() . " in " . basename($e->getFile()) . ":" . $e->getLine());
         return null;
     }
 }
