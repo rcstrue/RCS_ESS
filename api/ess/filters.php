@@ -79,7 +79,7 @@ function _handleProfile(): void
             ec.client_id,
             u.city AS emp_city
         FROM employees e
-        LEFT JOIN ess_employee_cache ec ON ec.employee_id = CAST(e.id AS CHAR)
+        LEFT JOIN ess_employee_cache ec ON ec.employee_id = CAST(e.id AS CHAR COLLATE utf8mb4_unicode_ci)
         LEFT JOIN units u ON u.id = e.unit_id
         WHERE e.id = ? AND e.status = ?
     ');
