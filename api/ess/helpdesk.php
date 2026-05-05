@@ -159,9 +159,9 @@ function _handleCreateTicket(): void
         VALUES (?, ?, ?, ?, ?, ?)
     ');
     $openStatus = 'open';
-    $stmt->bind_param('ssssss',
+    bindDynamicParams($stmt, 'ssssss', array(
         $employeeId, $category, $subject, $description, $openStatus, $priority
-    );
+    ));
     $stmt->execute();
     $newId = $stmt->insert_id;
     $stmt->close();

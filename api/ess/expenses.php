@@ -407,7 +407,10 @@ function handleCreateExpense(): void
         jsonOutput(array('success' => false, 'error' => 'Failed to create expense. Invalid category or type.'), 400);
         return;
     }
-    $stmt->bind_param('ssssdsssss', $employeeId, $managerId, $category, $type, $amount, $description, $billUrl, $billType, $expenseDate, 'pending');
+    $status = 'pending';
+    bindDynamicParams($stmt, 'ssssdsssss', array(
+        $employeeId, $managerId, $category, $type, $amount, $description, $billUrl, $billType, $expenseDate, $status
+    ));
     $stmt->execute();
     $newId = $stmt->insert_id;
     $stmt->close();
@@ -476,7 +479,7 @@ function handleUpdateExpense(): void
         jsonOutput(array('success' => false, 'error' => 'Database error'), 500);
         return;
     }
-    $updateStmt->bind_param('sssi', $status, $approvedBy, $rejectionReason, $expenseId);
+    bindDynamicParams($updateStmt, 'sssi', array($status, $approvedBy, $rejectionReason, $expenseId));
     $updateStmt->execute();
     $updateStmt->close();
 
