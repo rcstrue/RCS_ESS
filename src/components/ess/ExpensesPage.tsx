@@ -46,6 +46,7 @@ import {
   createExpense,
   approveExpense,
   fetchPendingTeamExpenses,
+  fetchExpenseTypes,
 } from '@/lib/ess-api';
 import { uploadFile, getFileUrl } from '@/lib/api/config';
 import type { Expense } from '@/lib/ess-types';
@@ -155,8 +156,13 @@ export function ExpensesPage({
   // Month filter
   const [selectedMonth, setSelectedMonth] = useState(currentMonthString());
 
+  // Expense types (dynamic from DB)
+  const [categories, setCategories] = useState<string[]>([]);
+  const [expenseTypes, setExpenseTypes] = useState<string[]>([]);
+
   // Submit dialog
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
+  const [submitCategory, setSubmitCategory] = useState<string>('');
   const [submitType, setSubmitType] = useState<string>('expense');
   const [submitAmount, setSubmitAmount] = useState('');
   const [submitDate, setSubmitDate] = useState(todayISTString());
@@ -212,6 +218,20 @@ export function ExpensesPage({
       setIsLoadingTeam(false);
     }
   }, [canApprove]);
+
+  // ── Load expense types & categories from DB ──
+  useEffect(() => {
+    fetchExpenseTypes().then(({ data }) => {
+      if (data) {
+        setCategories(data.categories || []);
+        setExpenseTypes(data.types || []);
+        if (data.categories?.length && !submitCategory) {
+          setSubmitCategory(data.categories[0]);
+        }
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     loadMyExpenses();
@@ -275,6 +295,10 @@ export function ExpensesPage({
   // ── Submit expense ──
   const handleSubmitExpense = async () => {
     const amount = parseFloat(submitAmount);
+    if (!submitCategory) {
+      toast.error('Please select a category');
+      return;
+    }
     if (!submitType) {
       toast.error('Please select an expense type');
       return;
@@ -308,6 +332,7 @@ export function ExpensesPage({
 
       const { error } = await createExpense({
         employee_id: employeeId,
+        category: submitCategory,
         type: submitType as 'advance' | 'expense',
         amount,
         expense_date: submitDate,
@@ -331,7 +356,8 @@ export function ExpensesPage({
   };
 
   const resetSubmitForm = () => {
-    setSubmitType('expense');
+    setSubmitCategory(categories[0] || '');
+    setSubmitType(expenseTypes[0] || 'expense');
     setSubmitAmount('');
     setSubmitDate(todayISTString());
     setSubmitDescription('');
@@ -604,6 +630,25 @@ export function ExpensesPage({
           </DialogHeader>
 
           <div className="flex flex-col gap-4 py-2">
+            {/* Category */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">
+                Category <span className="text-destructive">*</span>
+              </label>
+              <Select value={submitCategory} onValueChange={setSubmitCategory}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c.charAt(0).toUpperCase() + c.slice(1)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Type */}
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">
@@ -614,11 +659,17 @@ export function ExpensesPage({
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {EXPENSE_TYPES.map((t) => (
-                    <SelectItem key={t.value} value={t.value}>
-                      {t.label}
-                    </SelectItem>
-                  ))}
+                  {expenseTypes.length > 0
+                    ? expenseTypes.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t.charAt(0).toUpperCase() + t.slice(1)}
+                        </SelectItem>
+                      ))
+                    : EXPENSE_TYPES.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>
+                          {t.label}
+                        </SelectItem>
+                      ))}
                 </SelectContent>
               </Select>
             </div>
@@ -737,7 +788,7 @@ export function ExpensesPage({
             </Button>
             <Button
               onClick={handleSubmitExpense}
-              disabled={isSubmitting || isUploading || !submitType || !submitAmount || !submitDate}
+              disabled={isSubmitting || isUploading || !submitCategory || !submitType || !submitAmount || !submitDate}
             >
               {isSubmitting || isUploading ? (
                 <>

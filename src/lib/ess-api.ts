@@ -157,7 +157,7 @@ export async function fetchExpenseTypes() {
   return unwrap<{ categories: string[]; types: string[] }>(apiRequest<{ categories: string[]; types: string[] }>('/ess/expenses?view=types'));
 }
 
-export async function createExpense(data: { employee_id: number; type: string; amount: number; expense_date: string; description?: string }) {
+export async function createExpense(data: { employee_id: number; category: string; type: string; amount: number; expense_date: string; description?: string }) {
   return unwrap<Expense>(apiRequest<Expense>('/ess/expenses', {
     method: 'POST',
     body: JSON.stringify(data),
