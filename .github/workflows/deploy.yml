@@ -37,14 +37,15 @@ jobs:
             open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
 
             # Deploy frontend (dist/ → root)
+            cd /;
             lcd dist;
             mirror -R --no-symlinks --parallel=4 --no-perms --overwrite;
 
             # Deploy API PHP files (api/ess/ → api/ess/, config.php excluded by gitignore)
-            cd ../api/ess;
-            lcd ../../api/ess;
+            cd /api/ess;
+            lcd ../api/ess;
             put example.config.php;
-            mput *.php;
+            glob -a mput *.php;
 
             quit
           "
