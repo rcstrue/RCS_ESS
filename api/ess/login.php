@@ -164,7 +164,7 @@ try {
     }
 
     // Use bindDynamicParams helper (call_user_func_array with references)
-    bindDynamicParams($cacheStmt, 'ssissssissssss', array(
+    bindDynamicParams($cacheStmt, 'ssisssissssss', array(
         $employeeId, $role, $unitId, $unitName, $city, $state,
         $clientName, $clientId, $fullName, $mobileNumber,
         $designation, $profilePicUrl, $employeeCode
