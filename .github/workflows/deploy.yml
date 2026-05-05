@@ -40,9 +40,10 @@ jobs:
             lcd dist;
             mirror -R --no-symlinks --parallel=4 --no-perms --overwrite;
 
-            # Deploy API PHP files (api/ess/ → api/ess/)
+            # Deploy API PHP files (api/ess/ → api/ess/, config.php excluded by gitignore)
             cd ../api/ess;
             lcd ../../api/ess;
+            put example.config.php;
             mput *.php;
 
             quit

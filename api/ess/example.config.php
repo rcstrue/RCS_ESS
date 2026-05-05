@@ -4,18 +4,19 @@ declare(strict_types=1);
 /**
  * ESS API — Shared Configuration & Utilities
  * Employee Self Service application backend
- * Last updated: 2025-05-04 v2
+ *
+ * SETUP: Copy this file to config.php and update the values below.
  */
 
 // ─── Database Constants ───────────────────────────────────────────────────────
 define('DB_HOST', 'localhost');
-define('DB_USER', 'rcsfaxhz_bolt');
-define('DB_PASS', '9F8xK2mP5wL4nQ7v');
-define('DB_NAME', 'rcsfaxhz_bolt');
+define('DB_USER', 'your_db_user');
+define('DB_PASS', 'your_db_password');
+define('DB_NAME', 'your_db_name');
 
 // ─── Security Constants ──────────────────────────────────────────────────────
-define('API_KEY', 'RCS_HRMS_SECURE_KEY_982374982374');
-define('JWT_SECRET', 'rcs_ess_jwt_secret_key_2024_bolt_hrms');
+define('API_KEY', 'your_api_key_here');
+define('JWT_SECRET', 'your_jwt_secret_here');
 
 // ─── Timezone ─────────────────────────────────────────────────────────────────
 date_default_timezone_set('Asia/Kolkata');
