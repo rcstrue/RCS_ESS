@@ -1,14 +1,12 @@
-name: Deploy Frontend Only
+name: Build & Deploy (Static via FTP)
 
 on:
   push:
     branches:
       - main
-    paths-ignore:
-      - 'api/**'
 
 jobs:
-  deploy-frontend:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -29,18 +27,16 @@ jobs:
       - name: Install lftp
         run: sudo apt-get update && sudo apt-get install -y lftp
 
-      - name: Deploy frontend via FTP
+      - name: Deploy via FTP (upload and overwrite, preserve other files)
         run: |
           lftp -c "
             set ftp:ssl-allow no;
             set ftp:passive-mode on;
-            set net:timeout 60;
-            set net:max-retries 5;
-            set net:reconnect-interval-base 5;
-            set net:reconnect-interval-multiplier 2;
-            open -u '${{ secrets.FTP_USER }},${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
+            set net:timeout 30;
+            set net:max-retries 3;
+            open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
             lcd dist;
-            mirror -R --no-symlinks --no-perms --overwrite;
+            mirror -R --no-symlinks --parallel=4 --no-perms --overwrite;
             quit
           "
-          echo "Frontend deployed successfully"
+          echo "Deploy completed - files uploaded and overwritten, other server files preserved"
