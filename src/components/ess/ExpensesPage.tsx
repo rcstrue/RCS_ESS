@@ -296,11 +296,11 @@ export function ExpensesPage({
   const handleSubmitExpense = async () => {
     const amount = parseFloat(submitAmount);
     if (!submitCategory) {
-      toast.error('Please select a category');
+      toast.error('Please select a request type');
       return;
     }
     if (!submitType) {
-      toast.error('Please select an expense type');
+      toast.error('Please select a category');
       return;
     }
     if (!amount || amount <= 0) {
@@ -630,33 +630,33 @@ export function ExpensesPage({
           </DialogHeader>
 
           <div className="flex flex-col gap-4 py-2">
-            {/* Category */}
+            {/* Request Type (advance/expense) */}
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">
-                Category <span className="text-destructive">*</span>
+                Request Type <span className="text-destructive">*</span>
               </label>
               <Select value={submitCategory} onValueChange={setSubmitCategory}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
+                  <SelectValue placeholder="Select request type" />
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((c) => (
                     <SelectItem key={c} value={c}>
-                      {c.charAt(0).toUpperCase() + c.slice(1)}
+                      {c === 'advance' ? 'Advance Request' : c === 'employee_advance' ? 'Advance Given (Company)' : c === 'expense' ? 'Expense Claim' : c.charAt(0).toUpperCase() + c.slice(1)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Type */}
+            {/* Category (travel/food/cab/etc) */}
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">
-                Type <span className="text-destructive">*</span>
+                Category <span className="text-destructive">*</span>
               </label>
               <Select value={submitType} onValueChange={setSubmitType}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select type" />
+                  <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
                   {expenseTypes.length > 0

@@ -164,7 +164,7 @@ function handleGetExpenses(): void
     if (preg_match('/^\d{4}-\d{2}$/', $currentMonth)) {
         try {
             $monthLike = $currentMonth . '%';
-            $advStmt = $conn->prepare("SELECT COALESCE(SUM(amount),0) AS t FROM ess_expenses WHERE employee_id = ? AND expense_date LIKE ? AND category = 'advance' AND status IN ('approved','reimbursed')");
+            $advStmt = $conn->prepare("SELECT COALESCE(SUM(amount),0) AS t FROM ess_expenses WHERE employee_id = ? AND expense_date LIKE ? AND category IN ('advance','employee_advance') AND status IN ('approved','reimbursed')");
             if ($advStmt) {
                 $advStmt->bind_param('ss', $queryEmployeeId, $monthLike);
                 $advStmt->execute();
@@ -383,33 +383,43 @@ function handleCreateExpense(): void
         $expenseDate = date('Y-m-d');
     }
 
-    // Find manager
+    // Find employee info from cache
     $managerId = null;
+    $empName = '';
+    $empCode = '';
+    $unitId = null;
     try {
-        $mgrStmt = $conn->prepare('SELECT manager_id FROM ess_employee_cache WHERE employee_id = ?');
-        if ($mgrStmt) {
-            $mgrStmt->bind_param('s', $employeeId);
-            $mgrStmt->execute();
-            $mgr = $mgrStmt->get_result()->fetch_assoc();
-            $mgrStmt->close();
-            if ($mgr && isset($mgr['manager_id'])) {
-                $managerId = $mgr['manager_id'];
+        $cacheStmt = $conn->prepare('SELECT manager_id, full_name, employee_code, unit_id FROM ess_employee_cache WHERE employee_id = ?');
+        if ($cacheStmt) {
+            $cacheStmt->bind_param('s', $employeeId);
+            $cacheStmt->execute();
+            $cache = $cacheStmt->get_result()->fetch_assoc();
+            $cacheStmt->close();
+            if ($cache) {
+                $managerId = $cache['manager_id'] ?? null;
+                $empName = $cache['full_name'] ?? '';
+                $empCode = $cache['employee_code'] ?? '';
+                $unitId = $cache['unit_id'] ? (int)$cache['unit_id'] : null;
             }
         }
     } catch (\Throwable $e) {
         // not critical
     }
 
-    // Insert — types: s=employee, s=manager, s=category, s=type, d=amount, s=desc, s=bill_url, s=bill_type, s=date, s=status
-    // NOTE: ess_employee_cache does NOT have manager_id column, so managerId will be null
-    $stmt = $conn->prepare('INSERT INTO ess_expenses (employee_id, manager_id, category, type, amount, description, bill_url, bill_type, expense_date, status) VALUES (?,?,?,?,?,?,?,?,?,?)');
+    // Extract month/year from expense_date
+    $expMonth = (int)date('m', strtotime($expenseDate));
+    $expYear = (int)date('Y', strtotime($expenseDate));
+
+    // Insert with all required columns
+    $stmt = $conn->prepare('INSERT INTO ess_expenses (employee_id, manager_id, emp_name, emp_code, unit_id, month, year, category, type, amount, description, bill_url, bill_type, expense_date, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     if (!$stmt) {
-        jsonOutput(array('success' => false, 'error' => 'Failed to create expense. Invalid category or type.'), 400);
+        jsonOutput(array('success' => false, 'error' => 'Failed to create expense.'), 400);
         return;
     }
     $status = 'pending';
-    bindDynamicParams($stmt, 'ssssdsssss', array(
-        $employeeId, $managerId, $category, $type, $amount, $description, $billUrl, $billType, $expenseDate, $status
+    bindDynamicParams($stmt, 'ssssiisssdssssss', array(
+        $employeeId, $managerId, $empName, $empCode, $unitId, $expMonth, $expYear,
+        $category, $type, $amount, $description, $billUrl, $billType, $expenseDate, $status
     ));
     $stmt->execute();
     $newId = $stmt->insert_id;
