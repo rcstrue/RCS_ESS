@@ -1,4 +1,4 @@
-name: Build & Deploy (Static via FTP)
+name: Build & Deploy (Static + API via FTP)
 
 on:
   push:
@@ -27,7 +27,7 @@ jobs:
       - name: Install lftp
         run: sudo apt-get update && sudo apt-get install -y lftp
 
-      - name: Deploy via FTP (upload and overwrite, preserve other files)
+      - name: Deploy via FTP (frontend + API)
         run: |
           lftp -c "
             set ftp:ssl-allow no;
@@ -35,8 +35,16 @@ jobs:
             set net:timeout 30;
             set net:max-retries 3;
             open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASS }}' ${{ secrets.FTP_HOST }};
+
+            # Deploy frontend (dist/ → root)
             lcd dist;
             mirror -R --no-symlinks --parallel=4 --no-perms --overwrite;
+
+            # Deploy API PHP files (api/ess/ → api/ess/)
+            cd ../api/ess;
+            lcd ../../api/ess;
+            mput *.php;
+
             quit
           "
-          echo "Deploy completed - files uploaded and overwritten, other server files preserved"
+          echo "✅ Frontend + API deployed"
