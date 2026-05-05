@@ -158,42 +158,40 @@ function handleGetExpenses(): void
         $totalAmount = 0;
     }
 
-    // Monthly summary (wrapped in try so failure doesn't kill the response)
+    // Monthly summary
     $monthSummary = array('advance_received' => 0, 'approved_expenses' => 0, 'balance' => 0);
     $currentMonth = !empty($monthFilter) ? $monthFilter : date('Y-m');
     if (preg_match('/^(\d{4})-(\d{2})$/', $currentMonth, $m)) {
-        try {
-            $filterYear = (int)$m[1];
-            $filterMonth = (int)$m[2];
+        $filterYear = (int)$m[1];
+        $filterMonth = (int)$m[2];
+        $monthLike = $currentMonth . '%';
 
-            // Allocated advance from manager_advance_allocations table
+        // Allocated advance from manager_advance_allocations table
+        try {
             $allocStmt = $conn->prepare('SELECT COALESCE(SUM(amount),0) AS t FROM manager_advance_allocations WHERE manager_id = ? AND month = ? AND year = ?');
             if ($allocStmt) {
-                $allocStmt->bind_param('iii', $queryEmployeeId, $filterMonth, $filterYear);
+                $allocStmt->bind_param('sii', $queryEmployeeId, $filterMonth, $filterYear);
                 $allocStmt->execute();
-                $monthSummary['advance_received'] = (float)$allocStmt->get_result()->fetch_assoc()['t'];
+                $allocRow = $allocStmt->get_result()->fetch_assoc();
+                $monthSummary['advance_received'] = (float)($allocRow['t'] ?? 0);
                 $allocStmt->close();
             }
+        } catch (\Throwable $e) {
+            error_log('alloc_advance error: ' . $e->getMessage());
+        }
 
-            // Also include advances from ess_expenses (employee_advance category)
-            $monthLike = $currentMonth . '%';
-            $advStmt = $conn->prepare("SELECT COALESCE(SUM(amount),0) AS t FROM ess_expenses WHERE employee_id = ? AND expense_date LIKE ? AND category IN ('advance','employee_advance') AND status IN ('approved','reimbursed')");
-            if ($advStmt) {
-                $advStmt->bind_param('ss', $queryEmployeeId, $monthLike);
-                $advStmt->execute();
-                $monthSummary['advance_received'] += (float)$advStmt->get_result()->fetch_assoc()['t'];
-                $advStmt->close();
-            }
-
+        // Approved expenses from ess_expenses
+        try {
             $expStmt = $conn->prepare("SELECT COALESCE(SUM(amount),0) AS t FROM ess_expenses WHERE employee_id = ? AND expense_date LIKE ? AND category = 'expense' AND status IN ('approved','reimbursed')");
             if ($expStmt) {
                 $expStmt->bind_param('ss', $queryEmployeeId, $monthLike);
                 $expStmt->execute();
-                $monthSummary['approved_expenses'] = (float)$expStmt->get_result()->fetch_assoc()['t'];
+                $expRow = $expStmt->get_result()->fetch_assoc();
+                $monthSummary['approved_expenses'] = (float)($expRow['t'] ?? 0);
                 $expStmt->close();
             }
         } catch (\Throwable $e) {
-            error_log('month_summary error: ' . $e->getMessage());
+            error_log('approved_expenses error: ' . $e->getMessage());
         }
     }
     $monthSummary['balance'] = $monthSummary['advance_received'] - $monthSummary['approved_expenses'];
