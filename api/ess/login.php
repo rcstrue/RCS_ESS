@@ -134,6 +134,10 @@ try {
     $clientId = (int)($employee['client_id'] ?? 0);
     $unitId = (int)($employee['unit_id'] ?? 0);
 
+    // Extract all values into local variables first
+    $fullName = $employee['full_name'] ?? '';
+    $mobileNumber = $employee['mobile_number'] ?? '';
+
     $cacheStmt = $conn->prepare('
         INSERT INTO ess_employee_cache (
             employee_id, role, unit_id, unit_name, city, state,
@@ -158,11 +162,13 @@ try {
         jsonOutput(array('success' => false, 'error' => 'Failed to update cache'), 500);
         return;
     }
-    $cacheStmt->bind_param('ssissssissssss',
+
+    // Use bindDynamicParams helper (call_user_func_array with references)
+    bindDynamicParams($cacheStmt, 'ssissssissssss', array(
         $employeeId, $role, $unitId, $unitName, $city, $state,
-        $clientName, $clientId, $employee['full_name'], $employee['mobile_number'],
+        $clientName, $clientId, $fullName, $mobileNumber,
         $designation, $profilePicUrl, $employeeCode
-    );
+    ));
     $cacheStmt->execute();
     $cacheStmt->close();
 
