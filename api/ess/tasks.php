@@ -175,9 +175,10 @@ function _handleCreateTask(): void
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ');
     $pendingStatus = 'pending';
-    $stmt->bind_param('ssssssi',
-        $title, $description, $assignedTo, $employeeId, $priority, $deadline ?: null, $unitId
-    );
+    $taskDeadline = $deadline ?: null;
+    bindDynamicParams($stmt, 'ssssssi', array(
+        $title, $description, $assignedTo, $employeeId, $priority, $taskDeadline, $unitId
+    ));
     $stmt->execute();
     $newId = $stmt->insert_id;
     $stmt->close();

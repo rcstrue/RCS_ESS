@@ -71,7 +71,7 @@ function _handleGetAttendance(): void
         ORDER BY date DESC, check_in DESC
         LIMIT ? OFFSET ?
     ');
-    $stmt->bind_param('sssii', $queryEmployeeId, $startDate, $endDate, $limit, $offset);
+    bindDynamicParams($stmt, 'sssii', array($queryEmployeeId, $startDate, $endDate, $limit, $offset));
     $stmt->execute();
     $result = $stmt->get_result();
 
@@ -192,9 +192,9 @@ function _handleCheckIn(): void
         INSERT INTO ess_attendance (employee_id, date, check_in, status, latitude, longitude, note)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ');
-    $insertStmt->bind_param('sssssds',
+    bindDynamicParams($insertStmt, 'sssssds', array(
         $employeeId, $today, $currentTime, $status, $latitude, $longitude, $note
-    );
+    ));
     $insertStmt->execute();
     $newId = $insertStmt->insert_id;
     $insertStmt->close();

@@ -196,9 +196,10 @@ function _handleCreateAnnouncement(): void
         INSERT INTO ess_announcements (title, content, created_by, target_scope, target_id, priority)
         VALUES (?, ?, ?, ?, ?, ?)
     ');
-    $stmt->bind_param('ssssss',
-        $title, $content, $employeeId, $targetScope, $targetId ?: null, $priority
-    );
+    $targetIdVal = $targetId ?: null;
+    bindDynamicParams($stmt, 'ssssss', array(
+        $title, $content, $employeeId, $targetScope, $targetIdVal, $priority
+    ));
     $stmt->execute();
     $newId = $stmt->insert_id;
     $stmt->close();

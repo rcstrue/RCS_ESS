@@ -158,29 +158,40 @@ function handleGetExpenses(): void
         $totalAmount = 0;
     }
 
-    // Monthly summary (wrapped in try so failure doesn't kill the response)
+    // Monthly summary
     $monthSummary = array('advance_received' => 0, 'approved_expenses' => 0, 'balance' => 0);
     $currentMonth = !empty($monthFilter) ? $monthFilter : date('Y-m');
-    if (preg_match('/^\d{4}-\d{2}$/', $currentMonth)) {
-        try {
-            $monthLike = $currentMonth . '%';
-            $advStmt = $conn->prepare("SELECT COALESCE(SUM(amount),0) AS t FROM ess_expenses WHERE employee_id = ? AND expense_date LIKE ? AND category = 'advance' AND status IN ('approved','reimbursed')");
-            if ($advStmt) {
-                $advStmt->bind_param('ss', $queryEmployeeId, $monthLike);
-                $advStmt->execute();
-                $monthSummary['advance_received'] = (float)$advStmt->get_result()->fetch_assoc()['t'];
-                $advStmt->close();
-            }
+    if (preg_match('/^(\d{4})-(\d{2})$/', $currentMonth, $m)) {
+        $filterYear = (int)$m[1];
+        $filterMonth = (int)$m[2];
+        $monthLike = $currentMonth . '%';
 
+        // Allocated advance from manager_advance_allocations table
+        try {
+            $allocStmt = $conn->prepare('SELECT COALESCE(SUM(amount),0) AS t FROM manager_advance_allocations WHERE manager_id = ? AND month = ? AND year = ?');
+            if ($allocStmt) {
+                $allocStmt->bind_param('sii', $queryEmployeeId, $filterMonth, $filterYear);
+                $allocStmt->execute();
+                $allocRow = $allocStmt->get_result()->fetch_assoc();
+                $monthSummary['advance_received'] = (float)($allocRow['t'] ?? 0);
+                $allocStmt->close();
+            }
+        } catch (\Throwable $e) {
+            error_log('alloc_advance error: ' . $e->getMessage());
+        }
+
+        // Approved expenses from ess_expenses
+        try {
             $expStmt = $conn->prepare("SELECT COALESCE(SUM(amount),0) AS t FROM ess_expenses WHERE employee_id = ? AND expense_date LIKE ? AND category = 'expense' AND status IN ('approved','reimbursed')");
             if ($expStmt) {
                 $expStmt->bind_param('ss', $queryEmployeeId, $monthLike);
                 $expStmt->execute();
-                $monthSummary['approved_expenses'] = (float)$expStmt->get_result()->fetch_assoc()['t'];
+                $expRow = $expStmt->get_result()->fetch_assoc();
+                $monthSummary['approved_expenses'] = (float)($expRow['t'] ?? 0);
                 $expStmt->close();
             }
         } catch (\Throwable $e) {
-            error_log('month_summary error: ' . $e->getMessage());
+            error_log('approved_expenses error: ' . $e->getMessage());
         }
     }
     $monthSummary['balance'] = $monthSummary['advance_received'] - $monthSummary['approved_expenses'];
@@ -383,31 +394,44 @@ function handleCreateExpense(): void
         $expenseDate = date('Y-m-d');
     }
 
-    // Find manager
+    // Find employee info from cache
     $managerId = null;
+    $empName = '';
+    $empCode = '';
+    $unitId = null;
     try {
-        $mgrStmt = $conn->prepare('SELECT manager_id FROM ess_employee_cache WHERE employee_id = ?');
-        if ($mgrStmt) {
-            $mgrStmt->bind_param('s', $employeeId);
-            $mgrStmt->execute();
-            $mgr = $mgrStmt->get_result()->fetch_assoc();
-            $mgrStmt->close();
-            if ($mgr && isset($mgr['manager_id'])) {
-                $managerId = $mgr['manager_id'];
+        $cacheStmt = $conn->prepare('SELECT manager_id, full_name, employee_code, unit_id FROM ess_employee_cache WHERE employee_id = ?');
+        if ($cacheStmt) {
+            $cacheStmt->bind_param('s', $employeeId);
+            $cacheStmt->execute();
+            $cache = $cacheStmt->get_result()->fetch_assoc();
+            $cacheStmt->close();
+            if ($cache) {
+                $managerId = $cache['manager_id'] ?? null;
+                $empName = $cache['full_name'] ?? '';
+                $empCode = $cache['employee_code'] ?? '';
+                $unitId = $cache['unit_id'] ? (int)$cache['unit_id'] : null;
             }
         }
     } catch (\Throwable $e) {
         // not critical
     }
 
-    // Insert — types: s=employee, s=manager, s=category, s=type, d=amount, s=desc, s=bill_url, s=bill_type, s=date, s=status
-    // NOTE: ess_employee_cache does NOT have manager_id column, so managerId will be null
-    $stmt = $conn->prepare('INSERT INTO ess_expenses (employee_id, manager_id, category, type, amount, description, bill_url, bill_type, expense_date, status) VALUES (?,?,?,?,?,?,?,?,?,?)');
+    // Extract month/year from expense_date
+    $expMonth = (int)date('m', strtotime($expenseDate));
+    $expYear = (int)date('Y', strtotime($expenseDate));
+
+    // Insert with all required columns
+    $stmt = $conn->prepare('INSERT INTO ess_expenses (employee_id, manager_id, emp_name, emp_code, unit_id, month, year, category, type, amount, description, bill_url, bill_type, expense_date, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     if (!$stmt) {
-        jsonOutput(array('success' => false, 'error' => 'Failed to create expense. Invalid category or type.'), 400);
+        jsonOutput(array('success' => false, 'error' => 'Failed to create expense.'), 400);
         return;
     }
-    $stmt->bind_param('ssssdsssss', $employeeId, $managerId, $category, $type, $amount, $description, $billUrl, $billType, $expenseDate, 'pending');
+    $status = 'pending';
+    bindDynamicParams($stmt, 'ssssiisssdssssss', array(
+        $employeeId, $managerId, $empName, $empCode, $unitId, $expMonth, $expYear,
+        $category, $type, $amount, $description, $billUrl, $billType, $expenseDate, $status
+    ));
     $stmt->execute();
     $newId = $stmt->insert_id;
     $stmt->close();
@@ -476,7 +500,7 @@ function handleUpdateExpense(): void
         jsonOutput(array('success' => false, 'error' => 'Database error'), 500);
         return;
     }
-    $updateStmt->bind_param('sssi', $status, $approvedBy, $rejectionReason, $expenseId);
+    bindDynamicParams($updateStmt, 'sssi', array($status, $approvedBy, $rejectionReason, $expenseId));
     $updateStmt->execute();
     $updateStmt->close();
 

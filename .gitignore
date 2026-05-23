@@ -26,3 +26,4 @@ dist-ssr
 
 # Exclude from deployment
 skills/
+api/ess/config.php

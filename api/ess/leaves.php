@@ -204,7 +204,7 @@ function _handleApplyLeave(): void
             (start_date <= ? AND end_date >= ?)
         )
     ');
-    $overlapStmt->bind_param('ssssss', $employeeId, $startDate, $startDate, $endDate, $endDate);
+    bindDynamicParams($overlapStmt, 'sssss', array($employeeId, $startDate, $startDate, $endDate, $endDate));
     $overlapStmt->execute();
     if ($overlapStmt->get_result()->num_rows > 0) {
         $overlapStmt->close();
@@ -218,9 +218,9 @@ function _handleApplyLeave(): void
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ');
     $pendingStatus = 'pending';
-    $stmt->bind_param('ssssdss',
+    bindDynamicParams($stmt, 'ssssdss', array(
         $employeeId, $type, $startDate, $endDate, $days, $reason, $pendingStatus
-    );
+    ));
     $stmt->execute();
     $newId = $stmt->insert_id;
     $stmt->close();
@@ -287,7 +287,7 @@ function _handleUpdateLeave(): void
         SET status = ?, approved_by = ?, approved_at = NOW(), rejection_reason = ?, updated_at = NOW()
         WHERE id = ?
     ');
-    $updateStmt->bind_param('sssi', $status, $approvedBy, $rejectionReason, $leaveId);
+    bindDynamicParams($updateStmt, 'sssi', array($status, $approvedBy, $rejectionReason, $leaveId));
     $updateStmt->execute();
     $updateStmt->close();
 
