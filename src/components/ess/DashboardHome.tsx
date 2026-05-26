@@ -114,21 +114,30 @@ export default function DashboardHome({
   };
   const calcHours = (cIn: string | undefined, cOut: string | undefined) => {
     if (!cIn) return null;
-    // Handle time-only strings (e.g. "09:30:00")
     const timeOnlyRegex = /^\d{1,2}:\d{2}(:\d{2})?$/;
+
+    // Convert a time-only string to today's timestamp in IST
+    const timeOnlyToTodayMs = (timeStr: string): number => {
+      const [h, m, s] = timeStr.split(':').map(Number);
+      const now = new Date();
+      // Get current date in IST
+      const istStr = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+      const istDate = new Date(istStr);
+      istDate.setHours(h, m, s || 0, 0);
+      return istDate.getTime();
+    };
+
     let startMs: number;
     let endMs: number;
     if (timeOnlyRegex.test(cIn)) {
-      const [h, m, s] = cIn.split(':').map(Number);
-      startMs = (h * 3600 + m * 60 + (s || 0)) * 1000;
+      startMs = timeOnlyToTodayMs(cIn);
     } else {
       startMs = parseIST(cIn.replace(' ', 'T')).getTime();
     }
     if (!startMs || isNaN(startMs)) return null;
     if (cOut) {
       if (timeOnlyRegex.test(cOut)) {
-        const [h, m, s] = cOut.split(':').map(Number);
-        endMs = (h * 3600 + m * 60 + (s || 0)) * 1000;
+        endMs = timeOnlyToTodayMs(cOut);
       } else {
         endMs = parseIST(cOut.replace(' ', 'T')).getTime();
       }

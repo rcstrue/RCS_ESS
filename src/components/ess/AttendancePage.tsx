@@ -75,19 +75,28 @@ function formatDate(iso: string): string {
 function calculateHours(checkIn: string | undefined, checkOut: string | undefined): string {
   if (!checkIn) return '0h 0m';
   const timeOnlyRegex = /^\d{1,2}:\d{2}(:\d{2})?$/;
+
+  // Convert a time-only string to today's timestamp in IST
+  const timeOnlyToTodayMs = (timeStr: string): number => {
+    const [h, m, s] = timeStr.split(':').map(Number);
+    const now = new Date();
+    const istStr = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+    const istDate = new Date(istStr);
+    istDate.setHours(h, m, s || 0, 0);
+    return istDate.getTime();
+  };
+
   let startMs: number;
   let endMs: number;
   if (timeOnlyRegex.test(checkIn)) {
-    const [h, m, s] = checkIn.split(':').map(Number);
-    startMs = (h * 3600 + m * 60 + (s || 0)) * 1000;
+    startMs = timeOnlyToTodayMs(checkIn);
   } else {
     startMs = parseIST(checkIn).getTime();
   }
   if (isNaN(startMs)) return '0h 0m';
   if (checkOut) {
     if (timeOnlyRegex.test(checkOut)) {
-      const [h, m, s] = checkOut.split(':').map(Number);
-      endMs = (h * 3600 + m * 60 + (s || 0)) * 1000;
+      endMs = timeOnlyToTodayMs(checkOut);
     } else {
       endMs = parseIST(checkOut).getTime();
     }
