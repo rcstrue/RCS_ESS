@@ -139,10 +139,13 @@ export interface Expense {
   id: number;
   employee_id: number;
   employee_name?: string;
-  type: 'advance' | 'expense';
+  category?: string;
+  type: string;
   amount: number;
   expense_date: string;
   description?: string;
+  bill_url?: string;
+  bill_type?: string;
   status: 'pending' | 'approved' | 'rejected' | 'reimbursed';
   rejection_reason?: string;
   approved_by?: number;

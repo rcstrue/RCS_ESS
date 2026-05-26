@@ -60,11 +60,13 @@ interface ExpensesPageProps {
 }
 
 // ── Badge style maps ──
-const TYPE_BADGE: Record<string, string> = {
+const CATEGORY_BADGE: Record<string, string> = {
   advance:
     'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30',
   expense:
     'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30',
+  employee_advance:
+    'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30',
 };
 
 const STATUS_BADGE: Record<string, string> = {
@@ -81,9 +83,19 @@ const STATUS_LABEL: Record<string, string> = {
   reimbursed: 'Reimbursed',
 };
 
-const TYPE_LABEL: Record<string, string> = {
+const CATEGORY_LABEL: Record<string, string> = {
   advance: 'Advance',
   expense: 'Expense',
+  employee_advance: 'Advance to Employee',
+};
+
+const TYPE_LABEL: Record<string, string> = {
+  travel: 'Travel',
+  food: 'Food',
+  other: 'Other',
+  cab: 'Cab',
+  supplies: 'Supplies',
+  medical: 'Medical',
 };
 
 // ── Formatters ──
@@ -137,6 +149,10 @@ const navigateMonth = (monthStr: string, direction: number): string => {
 };
 
 // ── Main component ──
+
+// Categories to exclude from DB type enum
+const EXCLUDED_CATEGORIES = ['cab', 'supplies', 'medical'];
+
 export function ExpensesPage({
   employeeId,
   employeeName,
@@ -158,8 +174,18 @@ export function ExpensesPage({
   const [selectedMonth, setSelectedMonth] = useState(currentMonthString());
 
   // Expense types (dynamic from DB)
-  const [categories, setCategories] = useState<string[]>([]);
   const [expenseTypes, setExpenseTypes] = useState<string[]>([]);
+
+  // Hardcoded type options: Expense and Advance to Employee
+  const typeOptions = [
+    { value: 'expense', label: 'Expense' },
+    { value: 'employee_advance', label: 'Advance to Employee' },
+  ];
+
+  // Filtered expense types (DB 'type' enum minus excluded)
+  const filteredExpenseTypes = useMemo(() => {
+    return expenseTypes.filter((t) => !EXCLUDED_CATEGORIES.includes(t.toLowerCase()));
+  }, [expenseTypes]);
 
   // Submit dialog
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
@@ -235,14 +261,9 @@ export function ExpensesPage({
   useEffect(() => {
     fetchExpenseTypes().then(({ data }) => {
       if (data) {
-        setCategories(data.categories || []);
         setExpenseTypes(data.types || []);
-        if (data.categories?.length && !submitCategory) {
-          setSubmitCategory(data.categories[0]);
-        }
       }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -307,10 +328,10 @@ export function ExpensesPage({
   const handleSubmitExpense = async () => {
     const amount = parseFloat(submitAmount);
     if (!submitCategory) {
-      toast.error('Please select a request type');
+      toast.error('Please select a type');
       return;
     }
-    if (!submitType) {
+    if (submitCategory === 'expense' && !submitType) {
       toast.error('Please select a category');
       return;
     }
@@ -344,10 +365,12 @@ export function ExpensesPage({
       const { error } = await createExpense({
         employee_id: employeeId,
         category: submitCategory,
-        type: submitType as 'advance' | 'expense',
+        type: submitType || 'other',
         amount,
         expense_date: submitDate,
         description: submitDescription.trim() || undefined,
+        bill_url: billUrl || undefined,
+        bill_type: billFile?.type?.startsWith('image/') ? 'image' : billFile?.type === 'application/pdf' ? 'pdf' : undefined,
       });
 
       if (error) {
@@ -367,8 +390,8 @@ export function ExpensesPage({
   };
 
   const resetSubmitForm = () => {
-    setSubmitCategory(categories[0] || '');
-    setSubmitType(expenseTypes[0] || 'expense');
+    setSubmitCategory('expense');
+    setSubmitType(filteredExpenseTypes[0] || 'travel');
     setSubmitAmount('');
     setSubmitDate(todayISTString());
     setSubmitDescription('');
@@ -641,49 +664,51 @@ export function ExpensesPage({
           </DialogHeader>
 
           <div className="flex flex-col gap-4 py-2">
-            {/* Request Type (advance/expense) */}
+            {/* Type (Expense or Advance to Employee) */}
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">
-                Request Type <span className="text-destructive">*</span>
+                Type <span className="text-destructive">*</span>
               </label>
               <Select value={submitCategory} onValueChange={setSubmitCategory}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select request type" />
+                  <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c === 'advance' ? 'Advance Request' : c === 'employee_advance' ? 'Advance Given (Company)' : c === 'expense' ? 'Expense Claim' : c.charAt(0).toUpperCase() + c.slice(1)}
+                  {typeOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Category (travel/food/cab/etc) */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium">
-                Category <span className="text-destructive">*</span>
-              </label>
-              <Select value={submitType} onValueChange={setSubmitType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {expenseTypes.length > 0
-                    ? expenseTypes.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {t.charAt(0).toUpperCase() + t.slice(1)}
-                        </SelectItem>
-                      ))
-                    : EXPENSE_TYPES.map((t) => (
-                        <SelectItem key={t.value} value={t.value}>
-                          {t.label}
-                        </SelectItem>
-                      ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Category (travel/food/other - excludes cab, supplies, medical) */}
+            {submitCategory === 'expense' && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium">
+                  Category <span className="text-destructive">*</span>
+                </label>
+                <Select value={submitType} onValueChange={setSubmitType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredExpenseTypes.length > 0
+                      ? filteredExpenseTypes.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {t.charAt(0).toUpperCase() + t.slice(1)}
+                          </SelectItem>
+                        ))
+                      : EXPENSE_TYPES.map((t) => (
+                          <SelectItem key={t.value} value={t.value}>
+                            {t.label}
+                          </SelectItem>
+                        ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Amount */}
             <div className="flex flex-col gap-1.5">
@@ -704,10 +729,18 @@ export function ExpensesPage({
               </div>
             </div>
 
-            {/* Date - defaults to today */}
+            {/* Date - conditional label based on type */}
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">
-                Expense Date <span className="text-destructive">*</span>
+                {submitCategory === 'expense' ? (
+                  <>
+                    Expense Date <span className="text-destructive">*</span>
+                  </>
+                ) : (
+                  <>
+                    Advance Given Date <span className="text-destructive">*</span>
+                  </>
+                )}
               </label>
               <Input
                 type="date"
@@ -799,7 +832,7 @@ export function ExpensesPage({
             </Button>
             <Button
               onClick={handleSubmitExpense}
-              disabled={isSubmitting || isUploading || !submitCategory || !submitType || !submitAmount || !submitDate}
+              disabled={isSubmitting || isUploading || !submitCategory || (submitCategory === 'expense' && !submitType) || !submitAmount || !submitDate}
             >
               {isSubmitting || isUploading ? (
                 <>
@@ -884,9 +917,14 @@ function ExpenseCard({ expense }: { expense: Expense }) {
       <CardContent className="p-4">
         {/* Top row: badges */}
         <div className="flex flex-wrap items-center gap-2 mb-2">
-          <Badge variant="outline" className={TYPE_BADGE[expense.type] || ''}>
-            {TYPE_LABEL[expense.type] || expense.type}
+          <Badge variant="outline" className={CATEGORY_BADGE[expense.category || ''] || ''}>
+            {CATEGORY_LABEL[expense.category || ''] || expense.category || expense.type}
           </Badge>
+          {expense.type && expense.type !== 'other' && expense.category !== 'employee_advance' && (
+            <Badge variant="outline" className="bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20">
+              {TYPE_LABEL[expense.type] || expense.type}
+            </Badge>
+          )}
           <Badge variant="outline" className={STATUS_BADGE[expense.status] || ''}>
             {STATUS_LABEL[expense.status] || expense.status}
           </Badge>
@@ -945,8 +983,8 @@ function PendingTeamExpenseCard({
           <span className="font-semibold text-sm">
             {expense.employee_name || 'Unknown'}
           </span>
-          <Badge variant="outline" className={TYPE_BADGE[expense.type] || ''}>
-            {TYPE_LABEL[expense.type] || expense.type}
+          <Badge variant="outline" className={CATEGORY_BADGE[expense.category || ''] || ''}>
+            {CATEGORY_LABEL[expense.category || ''] || expense.category || expense.type}
           </Badge>
         </div>
 

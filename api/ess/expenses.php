@@ -167,14 +167,27 @@ function handleGetExpenses(): void
         $monthLike = $currentMonth . '%';
 
         // Allocated advance from manager_advance_allocations table
+        // First get the employee's manager_id, then sum allocations for that manager
         try {
-            $allocStmt = $conn->prepare('SELECT COALESCE(SUM(amount),0) AS t FROM manager_advance_allocations WHERE manager_id = ? AND month = ? AND year = ?');
-            if ($allocStmt) {
-                $allocStmt->bind_param('sii', $queryEmployeeId, $filterMonth, $filterYear);
-                $allocStmt->execute();
-                $allocRow = $allocStmt->get_result()->fetch_assoc();
-                $monthSummary['advance_received'] = (float)($allocRow['t'] ?? 0);
-                $allocStmt->close();
+            $mgrStmt = $conn->prepare('SELECT manager_id FROM ess_employee_cache WHERE employee_id = ?');
+            $empManagerId = null;
+            if ($mgrStmt) {
+                $mgrStmt->bind_param('s', $queryEmployeeId);
+                $mgrStmt->execute();
+                $mgrRow = $mgrStmt->get_result()->fetch_assoc();
+                $empManagerId = $mgrRow['manager_id'] ?? null;
+                $mgrStmt->close();
+            }
+
+            if (!empty($empManagerId)) {
+                $allocStmt = $conn->prepare('SELECT COALESCE(SUM(amount),0) AS t FROM manager_advance_allocations WHERE manager_id = ? AND month = ? AND year = ?');
+                if ($allocStmt) {
+                    $allocStmt->bind_param('sii', $empManagerId, $filterMonth, $filterYear);
+                    $allocStmt->execute();
+                    $allocRow = $allocStmt->get_result()->fetch_assoc();
+                    $monthSummary['advance_received'] = (float)($allocRow['t'] ?? 0);
+                    $allocStmt->close();
+                }
             }
         } catch (\Throwable $e) {
             error_log('alloc_advance error: ' . $e->getMessage());
@@ -385,10 +398,7 @@ function handleCreateExpense(): void
         jsonOutput(array('success' => false, 'error' => 'Amount must be greater than zero'), 400);
         return;
     }
-    if (empty($description)) {
-        jsonOutput(array('success' => false, 'error' => 'Description is required'), 400);
-        return;
-    }
+    // Description is optional
 
     if (empty($expenseDate) || !strtotime($expenseDate)) {
         $expenseDate = date('Y-m-d');
@@ -428,9 +438,16 @@ function handleCreateExpense(): void
         return;
     }
     $status = 'pending';
-    bindDynamicParams($stmt, 'ssssiisssdssssss', array(
-        $employeeId, $managerId, $empName, $empCode, $unitId, $expMonth, $expYear,
-        $category, $type, $amount, $description, $billUrl, $billType, $expenseDate, $status
+    // Ensure null values are safe for bind_param (PHP 8.1+ strict mode rejects null for i/d types)
+    $safeManagerId = $managerId !== null ? (string)$managerId : '';
+    $safeUnitId    = $unitId !== null ? (int)$unitId : 0;
+    $safeBillUrl   = $billUrl !== '' ? $billUrl : null;
+    $safeBillType  = $billType !== '' ? $billType : null;
+    // Type string: s=employeeId, s=managerId, s=empName, s=empCode, i=unitId, i=expMonth, i=expYear,
+    //             s=category, s=type, d=amount, s=description, s=billUrl, s=billType, s=expenseDate, s=status
+    bindDynamicParams($stmt, 'ssssiiisdssssss', array(
+        $employeeId, $safeManagerId, $empName, $empCode, $safeUnitId, $expMonth, $expYear,
+        $category, $type, $amount, $description, $safeBillUrl, $safeBillType, $expenseDate, $status
     ));
     $stmt->execute();
     $newId = $stmt->insert_id;
