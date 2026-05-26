@@ -193,9 +193,10 @@ function handleGetExpenses(): void
             error_log('alloc_advance error: ' . $e->getMessage());
         }
 
-        // Approved expenses from ess_expenses
+        // Approved expenses + advances from ess_expenses
+        // Both 'expense' and 'employee_advance' deduct from manager's allocation
         try {
-            $expStmt = $conn->prepare("SELECT COALESCE(SUM(amount),0) AS t FROM ess_expenses WHERE employee_id = ? AND expense_date LIKE ? AND category = 'expense' AND status IN ('approved','reimbursed')");
+            $expStmt = $conn->prepare("SELECT COALESCE(SUM(amount),0) AS t FROM ess_expenses WHERE employee_id = ? AND expense_date LIKE ? AND category IN ('expense','employee_advance') AND status IN ('approved','reimbursed')");
             if ($expStmt) {
                 $expStmt->bind_param('ss', $queryEmployeeId, $monthLike);
                 $expStmt->execute();

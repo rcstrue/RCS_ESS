@@ -555,7 +555,7 @@ export function ExpensesPage({
               <CardContent className="p-3 flex flex-col gap-1">
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Receipt className="h-3.5 w-3.5 text-blue-500" />
-                  Approved Expense
+                  Total Used
                 </div>
                 <span className="text-base font-bold text-blue-700 dark:text-blue-400">
                   {formatCurrency(monthSummary.totalExpense)}
