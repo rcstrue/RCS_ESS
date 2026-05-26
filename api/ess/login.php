@@ -194,16 +194,15 @@ try {
                 'department' => isset($employee['department']) ? $employee['department'] : '',
                 'employee_code' => $employeeCode,
                 'role' => $role,
-                'has_custom_pin' => $hasCustomPin,
                 'profile_pic_url' => $profilePicUrl,
                 'city' => $city,
                 'state' => $state,
-                'unit_name' => $unitName,
                 'unit_name' => $unitName,
                 'client_name' => $clientName,
                 'date_of_joining' => isset($employee['date_of_joining']) ? $employee['date_of_joining'] : '',
             ),
             'role' => $role,
+            'has_custom_pin' => $hasCustomPin,
             'token' => $token
         )
     ));
