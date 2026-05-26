@@ -11,7 +11,6 @@ import ForceChangePin from './ForceChangePin';
 import DashboardHome from './DashboardHome';
 import ProfileView from './ProfileView';
 import SettingsView from './SettingsView';
-import PageHeader from './PageHeader';
 import BottomNav from './BottomNav';
 import AttendancePage from './AttendancePage';
 import LeavesPage from './LeavesPage';
@@ -217,13 +216,13 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
             />
           </div>
         )}
-        {currentPage === 'directory' && (<><PageHeader title="Employees" subtitle="Search & browse the employee directory" /><DirectoryPage employeeId={emp.id} role={role} scope={scope} /></>)}
-        {currentPage === 'expenses' && (<><PageHeader title="Expenses" subtitle="Submit & track expense claims" /><ExpensesPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} /></>)}
-        {currentPage === 'attendance' && (<><PageHeader title="Attendance" subtitle="View your attendance history" onBack={() => navigate('dashboard')} /><AttendancePage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} /></>)}
-        {currentPage === 'leaves' && (<><PageHeader title="Leave" subtitle="Apply & track leave requests" onBack={() => navigate('dashboard')} /><LeavesPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} /></>)}
-        {currentPage === 'tasks' && (<><PageHeader title="Tasks" subtitle="Manage your task assignments" onBack={() => navigate('dashboard')} /><TasksPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} /></>)}
-        {currentPage === 'announcements' && (<><PageHeader title="Notices" subtitle="Company announcements & updates" onBack={() => navigate('dashboard')} /><AnnouncementsPage employeeId={emp.id} role={role} canPost={canPost} /></>)}
-        {currentPage === 'helpdesk' && (<><PageHeader title="Help Desk" subtitle="Submit & track support tickets" onBack={() => navigate('dashboard')} /><HelpdeskPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} /></>)}
+        {currentPage === 'directory' && <DirectoryPage employeeId={emp.id} role={role} scope={scope} />}
+        {currentPage === 'expenses' && <ExpensesPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} />}
+        {currentPage === 'attendance' && <AttendancePage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} />}
+        {currentPage === 'leaves' && <LeavesPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} />}
+        {currentPage === 'tasks' && <TasksPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} />}
+        {currentPage === 'announcements' && <AnnouncementsPage employeeId={emp.id} role={role} canPost={canPost} />}
+        {currentPage === 'helpdesk' && <HelpdeskPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} />}
         {currentPage === 'profile' && <ProfileView employee={emp} role={role} onNavigate={navigate} />}
         {currentPage === 'settings' && <SettingsView employee={emp} onLogout={clearSession} />}
       </main>
