@@ -93,15 +93,50 @@ export default function DashboardHome({
 
   const formatAttTime = (iso: string | undefined) => {
     if (!iso) return null;
-    const d = parseIST((iso || '').replace(' ', 'T'));
-    return isNaN(d.getTime()) ? null : d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    // Handle time-only strings (e.g. "09:30:00") by prepending today's date
+    const timeOnlyRegex = /^\d{1,2}:\d{2}(:\d{2})?$/;
+    let parseStr = (iso || '').replace(' ', 'T');
+    if (timeOnlyRegex.test(parseStr)) {
+      parseStr = `1970-01-01T${parseStr}`;
+    }
+    const d = parseIST(parseStr);
+    if (isNaN(d.getTime())) return null;
+    // For time-only strings, just format the time portion directly
+    if (timeOnlyRegex.test((iso || '').trim())) {
+      const parts = iso.split(':');
+      const h = parseInt(parts[0]);
+      const m = parseInt(parts[1] || '0');
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+      return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+    }
+    return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   };
   const calcHours = (cIn: string | undefined, cOut: string | undefined) => {
     if (!cIn) return null;
-    const start = parseIST(cIn.replace(' ', 'T')).getTime();
-    const end = cOut ? parseIST(cOut.replace(' ', 'T')).getTime() : Date.now();
-    if (!start || end < start) return null;
-    const diffMs = end - start;
+    // Handle time-only strings (e.g. "09:30:00")
+    const timeOnlyRegex = /^\d{1,2}:\d{2}(:\d{2})?$/;
+    let startMs: number;
+    let endMs: number;
+    if (timeOnlyRegex.test(cIn)) {
+      const [h, m, s] = cIn.split(':').map(Number);
+      startMs = (h * 3600 + m * 60 + (s || 0)) * 1000;
+    } else {
+      startMs = parseIST(cIn.replace(' ', 'T')).getTime();
+    }
+    if (!startMs || isNaN(startMs)) return null;
+    if (cOut) {
+      if (timeOnlyRegex.test(cOut)) {
+        const [h, m, s] = cOut.split(':').map(Number);
+        endMs = (h * 3600 + m * 60 + (s || 0)) * 1000;
+      } else {
+        endMs = parseIST(cOut.replace(' ', 'T')).getTime();
+      }
+    } else {
+      endMs = Date.now();
+    }
+    if (endMs < startMs) return null;
+    const diffMs = endMs - startMs;
     const h = Math.floor(diffMs / 3600000);
     const m = Math.floor((diffMs % 3600000) / 60000);
     return `${h}h ${m}m`;

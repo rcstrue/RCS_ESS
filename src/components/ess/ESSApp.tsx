@@ -31,7 +31,7 @@ import { getGreeting, getInitials, getScope, canApprove } from './helpers';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 // lucide icons
-import { Building2, Loader2 } from 'lucide-react';
+import { Building2, Loader2, UserPlus } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════
 // ESSApp — Slim orchestrator: auth, navigation, routing
@@ -107,6 +107,15 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
 
   const navigate = useCallback((page: string) => {
     if (page === 'logout') { clearSession(); return; }
+    if (page === 'new-registration') {
+      // Clear ESS session and navigate to registration page
+      localStorage.removeItem('ess_employee');
+      localStorage.removeItem('ess_token');
+      setSession(null);
+      setForcePinSession(null);
+      window.location.hash = '/';
+      return;
+    }
     setCurrentPage(page);
     setShowMoreMenu(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -178,6 +187,14 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
             <p className="text-sm font-semibold text-gray-900 truncate">{emp.full_name}</p>
             <p className="text-xs text-gray-500 truncate">{emp.designation || emp.employee_role || 'Employee'}</p>
           </div>
+          <button
+            onClick={() => navigate('new-registration')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition-colors"
+            title="New Registration"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span className="text-xs font-medium hidden sm:inline">New Registration</span>
+          </button>
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-600">
             <Building2 className="w-4 h-4 text-white" />
           </div>

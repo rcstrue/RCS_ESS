@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Phone, ArrowRight, Loader2, Calendar, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +26,9 @@ export function MobileEntry({ onMobileSubmit, onLoginSubmit, checkMobileExists }
   const [isUploadingProfile, setIsUploadingProfile] = useState(false);
   const [error, setError] = useState('');
   const [mobileError, setMobileError] = useState('');
+  const dayRef = useRef<HTMLInputElement>(null);
+  const monthRef = useRef<HTMLInputElement>(null);
+  const yearRef = useRef<HTMLInputElement>(null);
 
   const validateMobile = (value: string) => {
     const cleaned = value.replace(/\D/g, '').slice(0, 10);
@@ -142,9 +145,65 @@ export function MobileEntry({ onMobileSubmit, onLoginSubmit, checkMobileExists }
     
     if (!result.success) {
       setError(result.error || 'Login failed');
+      setIsLoggingIn(false);
+      setDobDay('');
+      setDobMonth('');
+      setDobYear('');
+      dayRef.current?.focus();
     }
-    
-    setIsLoggingIn(false);
+  };
+
+  // Auto-focus day input when login form appears
+  useEffect(() => {
+    if (showLoginForm) {
+      setTimeout(() => dayRef.current?.focus(), 100);
+    }
+  }, [showLoginForm]);
+
+  // Handle day input — auto-move to month after 2 digits
+  const handleDayChange = (value: string) => {
+    const cleaned = value.replace(/\D/g, '').slice(0, 2);
+    setDobDay(cleaned);
+    setError('');
+    if (cleaned.length === 2) {
+      monthRef.current?.focus();
+      monthRef.current?.select();
+    }
+  };
+
+  // Handle month input — auto-move to year after 2 digits
+  const handleMonthChange = (value: string) => {
+    const cleaned = value.replace(/\D/g, '').slice(0, 2);
+    setDobMonth(cleaned);
+    setError('');
+    if (cleaned.length === 2) {
+      yearRef.current?.focus();
+      yearRef.current?.select();
+    }
+  };
+
+  // Handle year input — auto-login after 4 digits
+  const handleYearChange = (value: string) => {
+    const cleaned = value.replace(/\D/g, '').slice(0, 4);
+    setDobYear(cleaned);
+    setError('');
+    if (cleaned.length === 4) {
+      // Validate day/month before auto-submitting
+      const day = dobDay.padStart(2, '0');
+      const month = dobMonth.padStart(2, '0');
+      const dayNum = parseInt(day);
+      const monthNum = parseInt(month);
+      if (dayNum >= 1 && dayNum <= 31 && monthNum >= 1 && monthNum <= 12) {
+        // Auto-login
+        handleLogin();
+      } else {
+        setError('Invalid date. Please check DD and MM.');
+        setDobDay('');
+        setDobMonth('');
+        setDobYear('');
+        dayRef.current?.focus();
+      }
+    }
   };
 
   const handleBackToMobile = () => {
@@ -313,36 +372,42 @@ export function MobileEntry({ onMobileSubmit, onLoginSubmit, checkMobileExists }
                     <div className="space-y-1">
                       <label className="text-xs text-muted-foreground">DD</label>
                       <Input
+                        ref={dayRef}
                         type="tel"
                         inputMode="numeric"
                         maxLength={2}
                         placeholder="DD"
                         value={dobDay}
-                        onChange={(e) => setDobDay(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                        onChange={(e) => handleDayChange(e.target.value)}
+                        onFocus={(e) => e.target.select()}
                         className="h-12 text-center text-lg"
                       />
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs text-muted-foreground">MM</label>
                       <Input
+                        ref={monthRef}
                         type="tel"
                         inputMode="numeric"
                         maxLength={2}
                         placeholder="MM"
                         value={dobMonth}
-                        onChange={(e) => setDobMonth(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                        onChange={(e) => handleMonthChange(e.target.value)}
+                        onFocus={(e) => e.target.select()}
                         className="h-12 text-center text-lg"
                       />
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs text-muted-foreground">YYYY</label>
                       <Input
+                        ref={yearRef}
                         type="tel"
                         inputMode="numeric"
                         maxLength={4}
                         placeholder="YYYY"
                         value={dobYear}
-                        onChange={(e) => setDobYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                        onChange={(e) => handleYearChange(e.target.value)}
+                        onFocus={(e) => e.target.select()}
                         className="h-12 text-center text-lg"
                       />
                     </div>

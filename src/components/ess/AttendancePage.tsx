@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   fetchAttendance,
-  checkIn,
   checkOut,
 } from '@/lib/ess-api';
 import type { AttendanceRecord } from '@/lib/ess-types';
@@ -13,7 +12,6 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import {
-  LogIn,
   LogOut,
   Clock,
   MapPin,
@@ -48,6 +46,16 @@ const STATUS_CONFIG: Record<
 // ─── Helpers ─────────────────────────────────────────────────────────
 function formatTime(iso: string | undefined): string {
   if (!iso) return '—';
+  // Handle time-only strings (e.g. "09:30:00")
+  const timeOnlyRegex = /^\d{1,2}:\d{2}(:\d{2})?$/;
+  if (timeOnlyRegex.test(iso.trim())) {
+    const parts = iso.split(':');
+    const h = parseInt(parts[0]);
+    const m = parseInt(parts[1] || '0');
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+    return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+  }
   const d = parseIST(iso);
   if (isNaN(d.getTime())) return '—';
   return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
@@ -66,10 +74,28 @@ function formatDate(iso: string): string {
 
 function calculateHours(checkIn: string | undefined, checkOut: string | undefined): string {
   if (!checkIn) return '0h 0m';
-  const start = parseIST(checkIn).getTime();
-  if (isNaN(start)) return '0h 0m';
-  const end = checkOut ? parseIST(checkOut).getTime() : Date.now();
-  const diffMs = end - start;
+  const timeOnlyRegex = /^\d{1,2}:\d{2}(:\d{2})?$/;
+  let startMs: number;
+  let endMs: number;
+  if (timeOnlyRegex.test(checkIn)) {
+    const [h, m, s] = checkIn.split(':').map(Number);
+    startMs = (h * 3600 + m * 60 + (s || 0)) * 1000;
+  } else {
+    startMs = parseIST(checkIn).getTime();
+  }
+  if (isNaN(startMs)) return '0h 0m';
+  if (checkOut) {
+    if (timeOnlyRegex.test(checkOut)) {
+      const [h, m, s] = checkOut.split(':').map(Number);
+      endMs = (h * 3600 + m * 60 + (s || 0)) * 1000;
+    } else {
+      endMs = parseIST(checkOut).getTime();
+    }
+  } else {
+    endMs = Date.now();
+  }
+  const diffMs = endMs - startMs;
+  if (diffMs < 0) return '0h 0m';
   const hours = Math.floor(diffMs / 3_600_000);
   const minutes = Math.floor((diffMs % 3_600_000) / 60_000);
   return `${hours}h ${minutes}m`;
@@ -103,7 +129,6 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
   const [loading, setLoading] = useState(true);
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [checkInLoading, setCheckInLoading] = useState(false);
   const [checkOutLoading, setCheckOutLoading] = useState(false);
   const clockRef = useRef<ReturnType<typeof setInterval>>();
 
@@ -178,30 +203,6 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
     });
   };
 
-  // Check In
-  const handleCheckIn = async () => {
-    try {
-      setCheckInLoading(true);
-      const location = await requestGeolocation();
-      const { data: checkInData, error: checkInError } = await checkIn({ employee_id: employeeId, location });
-      if (checkInError) {
-        toast.error(checkInError);
-        return;
-      }
-      // Save the attendance ID for cross-month check-out
-      if (checkInData?.id) {
-        activeAttendanceRef.current = checkInData.id;
-      }
-      toast.success('Checked in successfully!');
-      // Always reload attendance to get authoritative state
-      await loadAttendance();
-    } catch {
-      toast.error('Check-in failed. Please try again.');
-    } finally {
-      setCheckInLoading(false);
-    }
-  };
-
   // Check Out
   const handleCheckOut = async () => {
     // Use the tracked active attendance ID (cross-month safe), fall back to todayRecord
@@ -250,7 +251,6 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
   const isTodayMonth = year === new Date().getFullYear() && month === new Date().getMonth();
 
   const hasCheckedIn = todayRecord?.status === 'checked_in' || todayRecord?.status === 'checked_out';
-  const canCheckIn = !todayRecord || todayRecord.status === 'absent' || todayRecord.status === 'holiday' || todayRecord.status === 'leave';
   const canCheckOut = todayRecord?.status === 'checked_in' || (activeAttendanceRef.current && !todayRecord?.check_out);
 
   // ─── Render ──────────────────────────────────────────────────────
@@ -284,22 +284,6 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
 
           {/* Action buttons */}
           <div className="flex flex-col items-center gap-3">
-            {(canCheckIn || !hasCheckedIn) && !canCheckOut && (
-              <Button
-                size="xl"
-                className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white text-lg gap-2 shadow-lg shadow-emerald-200"
-                onClick={handleCheckIn}
-                disabled={checkInLoading}
-              >
-                {checkInLoading ? (
-                  <Clock className="h-5 w-5 animate-spin" />
-                ) : (
-                  <LogIn className="h-5 w-5" />
-                )}
-                {checkInLoading ? 'Checking In...' : 'Check In'}
-              </Button>
-            )}
-
             {canCheckOut && (
               <Button
                 size="xl"
