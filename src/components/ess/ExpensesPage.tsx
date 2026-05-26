@@ -148,6 +148,7 @@ export function ExpensesPage({
   // My expenses
   const [myExpenses, setMyExpenses] = useState<Expense[]>([]);
   const [isLoadingMy, setIsLoadingMy] = useState(true);
+  const [serverMonthSummary, setServerMonthSummary] = useState<{ advance_received: number; approved_expenses: number; balance: number } | null>(null);
 
   // Pending team expenses (for approve tab)
   const [pendingTeamExpenses, setPendingTeamExpenses] = useState<Expense[]>([]);
@@ -185,14 +186,20 @@ export function ExpensesPage({
   const [approvingId, setApprovingId] = useState<number | null>(null);
 
   // ── Load my expenses ──
-  const loadMyExpenses = useCallback(async () => {
+  const loadMyExpenses = useCallback(async (month?: string) => {
     setIsLoadingMy(true);
     try {
-      const { data, error } = await fetchExpenses(employeeId);
+      const { data, error } = await fetchExpenses(employeeId, { month });
       if (error) {
         toast.error('Failed to load expenses');
       } else {
         setMyExpenses(data?.items ?? []);
+        // Use month_summary from server (has advance from manager_advance_allocations)
+        if (data && 'month_summary' in data && (data as Record<string, unknown>).month_summary) {
+          setServerMonthSummary((data as Record<string, unknown>).month_summary as { advance_received: number; approved_expenses: number; balance: number });
+        } else {
+          setServerMonthSummary(null);
+        }
       }
     } catch {
       toast.error('Something went wrong while loading expenses');
@@ -200,6 +207,11 @@ export function ExpensesPage({
       setIsLoadingMy(false);
     }
   }, [employeeId]);
+
+  // Re-fetch expenses with month param when month changes
+  useEffect(() => {
+    loadMyExpenses(selectedMonth);
+  }, [selectedMonth, loadMyExpenses]);
 
   // ── Load pending team expenses (single API call) ──
   const loadPendingTeamExpenses = useCallback(async () => {
@@ -253,22 +265,21 @@ export function ExpensesPage({
 
   // ── Summary for selected month ──
   const monthSummary = useMemo(() => {
-    const totalAdvance = monthExpenses
-      .filter((e) => e.type === 'advance' && (e.status === 'approved' || e.status === 'reimbursed'))
-      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-
-    const totalExpense = monthExpenses
-      .filter((e) => e.type === 'expense' && (e.status === 'approved' || e.status === 'reimbursed'))
-      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    // Use server-provided advance from manager_advance_allocations table
+    const totalAdvance = serverMonthSummary?.advance_received ?? 0;
+    const totalExpense = serverMonthSummary?.approved_expenses ??
+      monthExpenses
+        .filter((e) => (e.status === 'approved' || e.status === 'reimbursed'))
+        .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
     const totalPending = monthExpenses
       .filter((e) => e.status === 'pending')
       .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
-    const balance = totalAdvance - totalExpense;
+    const balance = serverMonthSummary?.balance ?? (totalAdvance - totalExpense);
 
     return { totalAdvance, totalExpense, totalPending, balance };
-  }, [monthExpenses]);
+  }, [monthExpenses, serverMonthSummary]);
 
   // ── Handle bill file select ──
   const handleBillSelect = (e: React.ChangeEvent<HTMLInputElement>) => {

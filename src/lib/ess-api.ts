@@ -143,10 +143,13 @@ export async function updateTask(id: number, data: Partial<Task>) {
 }
 
 // ===== Expenses =====
-export async function fetchExpenses(employee_id: number, status?: string) {
+export async function fetchExpenses(employee_id: number, options?: { status?: string; month?: string }) {
   const params = new URLSearchParams({ employee_id: String(employee_id) });
-  if (status) params.set('status', status);
-  return unwrap<PaginatedResponse<Expense>>(apiRequest<PaginatedResponse<Expense>>(`/ess/expenses?${params}`));
+  if (options?.status) params.set('status', options.status);
+  if (options?.month) params.set('month', options.month);
+  return unwrap<PaginatedResponse<Expense> & { month_summary?: { advance_received: number; approved_expenses: number; balance: number } }>(
+    apiRequest(`/ess/expenses?${params}`)
+  );
 }
 
 export async function fetchPendingTeamExpenses() {
