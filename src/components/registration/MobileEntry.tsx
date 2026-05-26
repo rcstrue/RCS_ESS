@@ -120,10 +120,10 @@ export function MobileEntry({ onMobileSubmit, onLoginSubmit, checkMobileExists }
     onMobileSubmit(mobileNumber, profilePicUrl || undefined);
   };
 
-  const handleLogin = async () => {
-    const day = dobDay.padStart(2, '0');
-    const month = dobMonth.padStart(2, '0');
-    const year = dobYear;
+  const handleLogin = async (overrideDay?: string, overrideMonth?: string, overrideYear?: string) => {
+    const day = (overrideDay ?? dobDay).padStart(2, '0');
+    const month = (overrideMonth ?? dobMonth).padStart(2, '0');
+    const year = overrideYear ?? dobYear;
 
     if (!day || !month || !year || year.length !== 4) {
       setError('Please enter your complete date of birth');
@@ -188,14 +188,14 @@ export function MobileEntry({ onMobileSubmit, onLoginSubmit, checkMobileExists }
     setDobYear(cleaned);
     setError('');
     if (cleaned.length === 4) {
-      // Validate day/month before auto-submitting
+      // Pass values directly to avoid stale React state
       const day = dobDay.padStart(2, '0');
       const month = dobMonth.padStart(2, '0');
       const dayNum = parseInt(day);
       const monthNum = parseInt(month);
       if (dayNum >= 1 && dayNum <= 31 && monthNum >= 1 && monthNum <= 12) {
-        // Auto-login
-        handleLogin();
+        // Auto-login — pass values directly to bypass stale state
+        handleLogin(dobDay, dobMonth, cleaned);
       } else {
         setError('Invalid date. Please check DD and MM.');
         setDobDay('');
