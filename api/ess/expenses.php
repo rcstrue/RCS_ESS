@@ -167,10 +167,12 @@ function handleGetExpenses(): void
         $monthLike = $currentMonth . '%';
 
         // Allocated advance from manager_advance_allocations table
-        // First get the employee's manager_id, then sum allocations for that manager
+        // Try multiple sources to find the employee's manager_id
         try {
-            $mgrStmt = $conn->prepare('SELECT manager_id FROM ess_employee_cache WHERE employee_id = ?');
             $empManagerId = null;
+
+            // Source 1: ess_employee_cache
+            $mgrStmt = $conn->prepare('SELECT manager_id FROM ess_employee_cache WHERE employee_id = ?');
             if ($mgrStmt) {
                 $mgrStmt->bind_param('s', $queryEmployeeId);
                 $mgrStmt->execute();
@@ -179,6 +181,20 @@ function handleGetExpenses(): void
                 $mgrStmt->close();
             }
 
+            // Source 2: ess_employees table if cache didn't have it
+            if (empty($empManagerId)) {
+                $mgrStmt2 = $conn->prepare('SELECT manager_id FROM ess_employees WHERE id = ?');
+                if ($mgrStmt2) {
+                    $mgrStmt2->bind_param('s', $queryEmployeeId);
+                    $mgrStmt2->execute();
+                    $mgrRow2 = $mgrStmt2->get_result()->fetch_assoc();
+                    $empManagerId = $mgrRow2['manager_id'] ?? null;
+                    $mgrStmt2->close();
+                }
+            }
+
+            error_log("advance_lookup: employee={$queryEmployeeId} manager_id=" . ($empManagerId ?? 'NULL') . " month={$filterMonth} year={$filterYear}");
+
             if (!empty($empManagerId)) {
                 $allocStmt = $conn->prepare('SELECT COALESCE(SUM(amount),0) AS t FROM manager_advance_allocations WHERE manager_id = ? AND month = ? AND year = ?');
                 if ($allocStmt) {
@@ -186,7 +202,22 @@ function handleGetExpenses(): void
                     $allocStmt->execute();
                     $allocRow = $allocStmt->get_result()->fetch_assoc();
                     $monthSummary['advance_received'] = (float)($allocRow['t'] ?? 0);
+                    error_log("advance_lookup: sum=" . $monthSummary['advance_received']);
                     $allocStmt->close();
+                }
+            } else {
+                // Fallback: try using employee_id directly as manager_id
+                $allocStmt2 = $conn->prepare('SELECT COALESCE(SUM(amount),0) AS t FROM manager_advance_allocations WHERE manager_id = ? AND month = ? AND year = ?');
+                if ($allocStmt2) {
+                    $allocStmt2->bind_param('sii', $queryEmployeeId, $filterMonth, $filterYear);
+                    $allocStmt2->execute();
+                    $allocRow2 = $allocStmt2->get_result()->fetch_assoc();
+                    $fallbackAmount = (float)($allocRow2['t'] ?? 0);
+                    if ($fallbackAmount > 0) {
+                        $monthSummary['advance_received'] = $fallbackAmount;
+                        error_log("advance_lookup: fallback using employee_id direct, sum=" . $fallbackAmount);
+                    }
+                    $allocStmt2->close();
                 }
             }
         } catch (\Throwable $e) {
