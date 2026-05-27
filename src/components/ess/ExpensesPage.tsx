@@ -284,10 +284,17 @@ export function ExpensesPage({
     });
   }, [myExpenses, selectedMonth]);
 
+  // ── Previous month label for display ──
+  const prevMonthLabel = useMemo(() => {
+    const prev = navigateMonth(selectedMonth, -1);
+    return formatMonthYear(prev);
+  }, [selectedMonth]);
+
   // ── Summary for selected month ──
   const monthSummary = useMemo(() => {
-    // Use server-provided advance from manager_advance_allocations table
-    const totalAdvance = serverMonthSummary?.advance_received ?? 0;
+    const thisMonthAdvance = serverMonthSummary?.this_month_advance ?? 0;
+    const prevMonthBalance = serverMonthSummary?.prev_month_balance ?? 0;
+    const totalAdvance = serverMonthSummary?.advance_received ?? (thisMonthAdvance + prevMonthBalance);
     const totalExpense = serverMonthSummary?.approved_expenses ??
       monthExpenses
         .filter((e) => (e.status === 'approved' || e.status === 'reimbursed'))
@@ -299,7 +306,7 @@ export function ExpensesPage({
 
     const balance = serverMonthSummary?.balance ?? (totalAdvance - totalExpense);
 
-    return { totalAdvance, totalExpense, totalPending, balance };
+    return { totalAdvance, totalExpense, totalPending, balance, thisMonthAdvance, prevMonthBalance };
   }, [monthExpenses, serverMonthSummary]);
 
   // ── Handle bill file select ──
@@ -536,6 +543,10 @@ export function ExpensesPage({
                 <span className="text-base font-bold text-emerald-700 dark:text-emerald-400">
                   {formatCurrency(monthSummary.totalAdvance)}
                 </span>
+                <div className="text-[10px] text-muted-foreground leading-tight">
+                  <div>{prevMonthLabel} Balance: {formatCurrency(monthSummary.prevMonthBalance)}</div>
+                  <div>This Month: {formatCurrency(monthSummary.thisMonthAdvance)}</div>
+                </div>
               </CardContent>
             </Card>
             <Card>

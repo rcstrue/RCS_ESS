@@ -159,7 +159,10 @@ function handleGetExpenses(): void
     }
 
     // Monthly summary
-    $monthSummary = array('advance_received' => 0, 'approved_expenses' => 0, 'balance' => 0);
+    $monthSummary = array(
+        'advance_received' => 0, 'this_month_advance' => 0,
+        'prev_month_balance' => 0, 'approved_expenses' => 0, 'balance' => 0
+    );
     $currentMonth = !empty($monthFilter) ? $monthFilter : date('Y-m');
     if (preg_match('/^(\d{4})-(\d{2})$/', $currentMonth, $m)) {
         $filterYear = (int)$m[1];
@@ -174,15 +177,48 @@ function handleGetExpenses(): void
                 $allocStmt->bind_param('sii', $queryEmployeeId, $filterMonth, $filterYear);
                 $allocStmt->execute();
                 $allocRow = $allocStmt->get_result()->fetch_assoc();
-                $monthSummary['advance_received'] = (float)($allocRow['t'] ?? 0);
+                $monthSummary['this_month_advance'] = (float)($allocRow['t'] ?? 0);
                 $allocStmt->close();
             }
         } catch (\Throwable $e) {
             error_log('alloc_advance error: ' . $e->getMessage());
         }
 
-        // Approved expenses + advances from ess_expenses
-        // Both 'expense' and 'employee_advance' deduct from manager's allocation
+        // Previous month balance (carry forward)
+        $prevMonth = $filterMonth - 1;
+        $prevYear = $filterYear;
+        if ($prevMonth < 1) { $prevMonth = 12; $prevYear--; }
+        $prevAlloc = 0;
+        $prevUsed = 0;
+
+        try {
+            $prevAllocStmt = $conn->prepare('SELECT COALESCE(SUM(amount),0) AS t FROM manager_advance_allocations WHERE manager_id = ? AND month = ? AND year = ?');
+            if ($prevAllocStmt) {
+                $prevAllocStmt->bind_param('sii', $queryEmployeeId, $prevMonth, $prevYear);
+                $prevAllocStmt->execute();
+                $prevAllocRow = $prevAllocStmt->get_result()->fetch_assoc();
+                $prevAlloc = (float)($prevAllocRow['t'] ?? 0);
+                $prevAllocStmt->close();
+            }
+        } catch (\Throwable $e) {}
+
+        try {
+            $prevMonthLike = sprintf('%04d-%02d', $prevYear, $prevMonth) . '%';
+            $prevExpStmt = $conn->prepare("SELECT COALESCE(SUM(amount),0) AS t FROM ess_expenses WHERE employee_id = ? AND expense_date LIKE ? AND category IN ('expense','employee_advance') AND status IN ('approved','reimbursed')");
+            if ($prevExpStmt) {
+                $prevExpStmt->bind_param('ss', $queryEmployeeId, $prevMonthLike);
+                $prevExpStmt->execute();
+                $prevExpRow = $prevExpStmt->get_result()->fetch_assoc();
+                $prevUsed = (float)($prevExpRow['t'] ?? 0);
+                $prevExpStmt->close();
+            }
+        } catch (\Throwable $e) {}
+
+        $monthSummary['prev_month_balance'] = $prevAlloc - $prevUsed;
+        // Total advance = previous month carry-forward + this month allocation
+        $monthSummary['advance_received'] = $monthSummary['this_month_advance'] + $monthSummary['prev_month_balance'];
+
+        // Approved expenses + advances from ess_expenses for current month
         try {
             $expStmt = $conn->prepare("SELECT COALESCE(SUM(amount),0) AS t FROM ess_expenses WHERE employee_id = ? AND expense_date LIKE ? AND category IN ('expense','employee_advance') AND status IN ('approved','reimbursed')");
             if ($expStmt) {
