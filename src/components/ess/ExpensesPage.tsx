@@ -498,19 +498,6 @@ export function ExpensesPage({
         </div>
       </div>
 
-      {/* Month header banner */}
-      <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="p-4">
-          <h3 className="text-sm font-semibold text-primary mb-1">
-            Expense / Advance For the month of{' '}
-            <span className="text-base">{formatMonthYear(selectedMonth)}</span>
-          </h3>
-          <p className="text-xs text-muted-foreground">
-            {monthExpenses.length} record{monthExpenses.length !== 1 ? 's' : ''} this month
-          </p>
-        </CardContent>
-      </Card>
-
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full sm:w-auto">
