@@ -48,7 +48,20 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
       const stored = localStorage.getItem('ess_employee');
       if (stored) {
         const parsed = JSON.parse(stored) as ESSSession;
-        if (parsed?.employee?.id) { setSession(parsed); return; }
+        if (parsed?.employee?.id) {
+          // If user hasn't completed PIN change, redirect to force PIN screen
+          if (!parsed.has_custom_pin) {
+            setForcePinSession(parsed);
+            setIsFirstLogin(true);
+            // Also re-save standalone token as backup for mobile localStorage reliability
+            if (parsed.token) {
+              localStorage.setItem('ess_token', parsed.token);
+            }
+            return;
+          }
+          setSession(parsed);
+          return;
+        }
       }
     } catch { /* invalid */ }
     localStorage.removeItem('ess_employee');
@@ -90,7 +103,13 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
 
   const handleForcePinChange = useCallback((s: ESSSession) => {
     setForcePinSession(s);
-    setIsFirstLogin(true); // First login = birth year → force PIN setup
+    setIsFirstLogin(true);
+    // Persist to localStorage immediately — mobile can lose ess_token under storage pressure
+    // Store in BOTH keys for reliability
+    localStorage.setItem('ess_employee', JSON.stringify(s));
+    if (s.token) {
+      localStorage.setItem('ess_token', s.token);
+    }
   }, []);
 
   const handleForcePinComplete = useCallback((s: ESSSession) => {

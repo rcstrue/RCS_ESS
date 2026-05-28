@@ -39,7 +39,24 @@ export async function apiRequest<T>(
   options: RequestInit = {}
 ): Promise<{ data: T | null; error: string | null }> {
   try {
-    const token = localStorage.getItem('admin_token') || localStorage.getItem('ess_token');
+    // Resolve token from multiple sources for mobile reliability
+    let token: string | null = null;
+
+    // Priority 1: ess_employee session object (most complete, has structured data)
+    const essSession = localStorage.getItem('ess_employee');
+    if (essSession) {
+      try {
+        const parsed = JSON.parse(essSession);
+        if (parsed?.token) token = parsed.token;
+      } catch { /* invalid session */ }
+    }
+
+    // Priority 2: standalone ess_token (backup)
+    if (!token) token = localStorage.getItem('ess_token');
+
+    // Priority 3: admin_token (fallback)
+    if (!token) token = localStorage.getItem('admin_token');
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-API-KEY': API_KEY,
@@ -49,18 +66,14 @@ export async function apiRequest<T>(
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const essSession = localStorage.getItem('ess_employee');
+    // Also set X-Employee-ID from ess_employee session
     if (essSession) {
       try {
         const parsed = JSON.parse(essSession);
         if (parsed?.employee?.id) {
           headers['X-Employee-ID'] = String(parsed.employee.id);
         }
-        // Also store token if the session has one
-        if (parsed?.token) {
-          headers['Authorization'] = `Bearer ${parsed.token}`;
-        }
-      } catch { /* invalid session */ }
+      } catch { /* ignore */ }
     }
 
     const response = await fetch(`${API_BASE_URL}/api${endpoint}`, {
@@ -111,6 +124,18 @@ export async function apiRequest<T>(
       if (response.status === 401) {
         const isEss = localStorage.getItem('ess_token') || localStorage.getItem('ess_employee');
         if (isEss) {
+          // Don't nuke tokens if user is in force PIN change flow (has_custom_pin=false)
+          // This prevents cascade failure on mobile where PIN change API call might race
+          try {
+            const sessionStr = localStorage.getItem('ess_employee');
+            if (sessionStr) {
+              const s = JSON.parse(sessionStr);
+              if (!s.has_custom_pin) {
+                // User is changing PIN — just return the error, don't clear tokens
+                return { data: null, error: data?.error || data?.message || 'Authentication error. Please try again.' };
+              }
+            }
+          } catch { /* parse error — proceed with normal clear */ }
           localStorage.removeItem('ess_token');
           localStorage.removeItem('ess_employee');
           // Dispatch only ONCE to prevent toast spam from concurrent 401s
