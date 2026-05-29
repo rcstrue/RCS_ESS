@@ -22,6 +22,7 @@ import {
   Leaf,
   CheckCircle2,
   ListTodo,
+  Timer,
   MapPin,
   Loader2,
 } from 'lucide-react';
