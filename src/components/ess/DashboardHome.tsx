@@ -22,7 +22,6 @@ import {
   Leaf,
   CheckCircle2,
   ListTodo,
-  Timer,
   MapPin,
   Loader2,
 } from 'lucide-react';
@@ -89,26 +88,8 @@ export default function DashboardHome({
   const attStatus = att?.status || null;
   const canCheckIn = !attStatus || attStatus === 'absent' || attStatus === 'holiday' || attStatus === 'leave';
 
-  // Check-out only allowed after 8 hours from check-in time
-  const hoursSinceCheckIn = (() => {
-    if (!att?.check_in) return 0;
-    const timeOnlyRegex = /^\d{1,2}:\d{2}(:\d{2})?$/;
-    let checkInMs: number;
-    if (timeOnlyRegex.test(att.check_in)) {
-      const [h, m, s] = att.check_in.split(':').map(Number);
-      const istStr = new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
-      const istDate = new Date(istStr);
-      istDate.setHours(h, m, s || 0, 0);
-      checkInMs = istDate.getTime();
-    } else {
-      const d = parseIST(att.check_in.replace(' ', 'T'));
-      checkInMs = isNaN(d.getTime()) ? 0 : d.getTime();
-    }
-    if (!checkInMs) return 0;
-    return (Date.now() - checkInMs) / 3600000; // hours
-  })();
-
-  const canCheckOut = attStatus === 'checked_in' && hoursSinceCheckIn >= 8;
+  // Check-out available immediately after check-in
+  const canCheckOut = attStatus === 'checked_in';
   const isCheckedOut = attStatus === 'checked_out' || attStatus === 'present';
 
   const formatAttTime = (iso: string | undefined) => {
@@ -311,14 +292,7 @@ export default function DashboardHome({
                     {checkOutLoading ? 'Checking Out...' : 'Check Out'}
                   </Button>
                 )}
-                {attStatus === 'checked_in' && !canCheckOut && (
-                  <div className="flex-1 flex items-center justify-center gap-2 h-12 rounded-lg bg-sky-50 border border-sky-200">
-                    <Timer className="w-4 h-4 text-sky-600" />
-                    <span className="text-sm font-medium text-sky-700">
-                      Check-out in {Math.max(0, Math.ceil(8 - hoursSinceCheckIn))}h
-                    </span>
-                  </div>
-                )}
+
                 {isCheckedOut && (
                   <div className="flex-1 flex items-center justify-center gap-2 h-12 rounded-lg bg-emerald-50 border border-emerald-200">
                     <CheckCircle2 className="w-5 h-5 text-emerald-600" />
