@@ -20,9 +20,11 @@ import { TasksPage } from './TasksPage';
 import HelpdeskPage from './HelpdeskPage';
 import AnnouncementsPage from './AnnouncementsPage';
 import DirectoryPage from './DirectoryPage';
+import { InstallBanner, PermissionDialog } from './InstallBanner';
 
 // Hook
 import { useDashboard } from './hooks/useDashboard';
+import { usePwaInstall } from './hooks/usePwaInstall';
 
 // Helpers
 import { getGreeting, getInitials, getScope, canApprove } from './helpers';
@@ -171,6 +173,9 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
   // ── Dashboard ──
   const { dashboardData, dashboardLoading, checkInLoading, checkOutLoading, loadDashboardData, handleCheckIn, handleCheckOut } = useDashboard(session);
 
+  // ── PWA Install ──
+  const pwa = usePwaInstall();
+
   const isFirstMount = useRef(true);
   useEffect(() => {
     if (isFirstMount.current) {
@@ -263,6 +268,14 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
               <h2 className="text-2xl font-bold text-gray-900">{getGreeting()}, {emp.full_name?.split(' ')[0]} 👋</h2>
               <p className="text-sm text-gray-500 mt-0.5">{new Date().toLocaleDateString('en-IN', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
             </div>
+            {/* PWA Install Banner */}
+            {pwa.shouldShowInstall && currentPage === 'dashboard' && (
+              <InstallBanner
+                onInstall={pwa.install}
+                onDismiss={pwa.dismiss}
+                isIOS={pwa.state.isIOS}
+              />
+            )}
             <DashboardHome
               employee={emp} role={role} dashboardData={dashboardData}
               loading={dashboardLoading} onNavigate={navigate}
@@ -293,6 +306,14 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
           onDismiss={handleFirstLoginComplete}
         />
       )}
+
+      {/* Post-Install Permission Dialog */}
+      <PermissionDialog
+        open={pwa.shouldShowPermissions && !showFirstLoginPopup}
+        onRequest={pwa.requestPermissions}
+        onSkip={pwa.requestPermissions} // Will mark as done on skip too
+        currentPermissions={pwa.state.permissions}
+      />
     </div>
   );
 }
