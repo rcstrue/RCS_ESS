@@ -22,12 +22,9 @@ $method = $_SERVER['REQUEST_METHOD'];
 try {
     switch ($method) {
         case 'GET':
-            // Check if fetching a single employee by ID
-            $pathParts = explode('/', trim(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), '/'));
-            // URL pattern: api/ess/ess-employees or api/ess/ess-employees/123
-            $endpointIndex = array_search('ess-employees', $pathParts);
-            if ($endpointIndex !== false && isset($pathParts[$endpointIndex + 1]) && is_numeric($pathParts[$endpointIndex + 1])) {
-                $targetId = (int)$pathParts[$endpointIndex + 1];
+            // If ?id=123 is present, fetch single employee by ID
+            $targetId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+            if ($targetId > 0) {
                 handleGetById($conn, $targetId);
             } else {
                 handleGet($conn);

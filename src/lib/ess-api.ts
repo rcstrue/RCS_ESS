@@ -221,7 +221,7 @@ export async function fetchUnits(scope?: string, requester_id?: number, client_i
 
 // ===== Employees (Directory) =====
 export async function fetchEmployeeById(employeeId: number) {
-  return unwrap<Employee>(apiRequest<Employee>(`/ess/ess-employees/${employeeId}`));
+  return unwrap<Employee>(apiRequest<Employee>(`/ess/ess-employees?id=${employeeId}`));
 }
 
 export async function fetchEmployees(params: { scope?: string; requester_id?: number; limit?: number; page?: number; q?: string; client_id?: number; unit_id?: number }) {
