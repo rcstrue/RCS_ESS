@@ -32,6 +32,10 @@ export interface Employee {
   probation_period?: string;
   date_of_leaving?: string;
   profile_pic_url?: string;
+  profile_pic_cropped_url?: string;
+  aadhaar_front_url?: string;
+  aadhaar_back_url?: string;
+  bank_document_url?: string;
   profile_completion?: number;
   employee_role?: string;
   worker_category?: string;

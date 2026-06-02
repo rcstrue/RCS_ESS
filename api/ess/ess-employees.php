@@ -314,6 +314,10 @@ function handleGetById($conn, $targetId) {
         jsonError('Employee not found', 404);
     }
 
+    // Ensure 'id' key exists for frontend compatibility
+    if (isset($row['employee_id'])) {
+        $row['id'] = (int)$row['employee_id'];
+    }
     jsonResponse([
         'success' => true,
         'data' => $row

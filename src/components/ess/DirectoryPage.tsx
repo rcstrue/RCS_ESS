@@ -460,6 +460,7 @@ export default function DirectoryPage({
       {/* ── Profile Dialog (Full Detail) ── */}
       <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md p-0">
+          <DialogTitle className="sr-only">Employee Profile — {emp?.full_name || 'Employee'}</DialogTitle>
           {emp && (
             <>
               {profileLoading ? (
@@ -512,107 +513,103 @@ export default function DirectoryPage({
                   <div className="px-4 pb-6 space-y-4">
                     {/* Personal Information */}
                     <ProfileSection title="Personal">
-                      {emp.father_name && <ProfileRow icon={User} label="Father/Husband Name" value={emp.father_name} />}
-                      {emp.date_of_birth && <ProfileRow icon={Calendar} label="Date of Birth" value={formatDate(emp.date_of_birth)} />}
-                      {emp.gender && <ProfileRow icon={User} label="Gender" value={emp.gender} />}
-                      {emp.marital_status && <ProfileRow icon={Heart} label="Marital Status" value={emp.marital_status} />}
-                      {emp.blood_group && <ProfileRow icon={Heart} label="Blood Group" value={emp.blood_group} />}
+                      <ProfileRow icon={User} label="Father/Husband Name" value={emp.father_name} />
+                      <ProfileRow icon={Calendar} label="Date of Birth" value={emp.date_of_birth ? formatDate(emp.date_of_birth) : undefined} />
+                      <ProfileRow icon={User} label="Gender" value={emp.gender} />
+                      <ProfileRow icon={Heart} label="Marital Status" value={emp.marital_status} />
+                      <ProfileRow icon={Heart} label="Blood Group" value={emp.blood_group} />
                     </ProfileSection>
 
                     {/* Contact */}
                     <ProfileSection title="Contact">
-                      {emp.mobile_number && <ProfileRow icon={Phone} label="Mobile" value={maskMobile(emp.mobile_number)} />}
-                      {emp.alternate_mobile && <ProfileRow icon={Phone} label="Alternate Mobile" value={maskMobile(emp.alternate_mobile)} />}
-                      {emp.email && <ProfileRow icon={Mail} label="Email" value={emp.email} />}
-                      {emp.address && <ProfileRow icon={MapPin} label="Address" value={emp.address} />}
-                      {(emp.city || emp.district || emp.state) && (
-                        <ProfileRow
-                          icon={MapPin}
-                          label="Location"
-                          value={[emp.city, emp.district, emp.state].filter(Boolean).join(', ')}
-                        />
-                      )}
-                      {emp.pin_code && <ProfileRow icon={Hash} label="PIN Code" value={emp.pin_code} />}
+                      <ProfileRow icon={Phone} label="Mobile" value={emp.mobile_number ? maskMobile(emp.mobile_number) : undefined} />
+                      <ProfileRow icon={Phone} label="Alternate Mobile" value={emp.alternate_mobile ? maskMobile(emp.alternate_mobile) : undefined} />
+                      <ProfileRow icon={Mail} label="Email" value={emp.email} />
+                      <ProfileRow icon={MapPin} label="Address" value={emp.address} />
+                      <ProfileRow
+                        icon={MapPin}
+                        label="Location"
+                        value={[emp.city, emp.district, emp.state].filter(Boolean).join(', ') || undefined}
+                      />
+                      <ProfileRow icon={Hash} label="PIN Code" value={emp.pin_code} />
                     </ProfileSection>
 
                     {/* Employment */}
                     <ProfileSection title="Employment">
-                      {(emp.client_name || emp.unit_name) && (
-                        <ProfileRow
-                          icon={Building2}
-                          label="Client / Unit"
-                          value={[emp.client_name, emp.unit_name].filter(Boolean).join(' / ')}
-                        />
-                      )}
-                      {emp.department && <ProfileRow icon={Building2} label="Department" value={emp.department} />}
-                      {emp.employment_type && <ProfileRow icon={Briefcase} label="Employment Type" value={emp.employment_type} />}
-                      {emp.worker_category && <ProfileRow icon={Shield} label="Worker Category" value={emp.worker_category} />}
-                      {emp.employee_role && <ProfileRow icon={IdCard} label="Role" value={emp.employee_role} />}
-                      {emp.date_of_joining && <ProfileRow icon={Clock} label="Date of Joining" value={formatDate(emp.date_of_joining)} />}
-                      {emp.confirmation_date && <ProfileRow icon={Calendar} label="Confirmation Date" value={formatDate(emp.confirmation_date)} />}
-                      {emp.probation_period && <ProfileRow icon={Clock} label="Probation Period" value={`${emp.probation_period} months`} />}
-                      {emp.date_of_leaving && <ProfileRow icon={Calendar} label="Date of Leaving" value={formatDate(emp.date_of_leaving)} />}
+                      <ProfileRow
+                        icon={Building2}
+                        label="Client / Unit"
+                        value={[emp.client_name, emp.unit_name].filter(Boolean).join(' / ') || undefined}
+                      />
+                      <ProfileRow icon={Building2} label="Department" value={emp.department} />
+                      <ProfileRow icon={Briefcase} label="Employment Type" value={emp.employment_type} />
+                      <ProfileRow icon={Shield} label="Worker Category" value={emp.worker_category} />
+                      <ProfileRow icon={IdCard} label="Role" value={emp.employee_role} />
+                      <ProfileRow icon={Clock} label="Date of Joining" value={emp.date_of_joining ? formatDate(emp.date_of_joining) : undefined} />
+                      <ProfileRow icon={Calendar} label="Confirmation Date" value={emp.confirmation_date ? formatDate(emp.confirmation_date) : undefined} />
+                      <ProfileRow icon={Clock} label="Probation Period" value={emp.probation_period ? `${emp.probation_period} months` : undefined} />
+                      <ProfileRow icon={Calendar} label="Date of Leaving" value={emp.date_of_leaving ? formatDate(emp.date_of_leaving) : undefined} />
                     </ProfileSection>
 
-                    {/* IDs */}
+                    {/* Government IDs — always show section */}
                     <ProfileSection title="Government IDs">
-                      {emp.aadhaar_number && <ProfileRow icon={IdCard} label="Aadhaar Number" value={emp.aadhaar_number} />}
-                      {emp.uan_number && <ProfileRow icon={Hash} label="UAN Number" value={emp.uan_number} />}
-                      {emp.esic_number && <ProfileRow icon={Hash} label="ESIC Number" value={emp.esic_number} />}
+                      <ProfileRow icon={IdCard} label="Aadhaar Number" value={emp.aadhaar_number} />
+                      <ProfileRow icon={Hash} label="UAN Number" value={emp.uan_number} />
+                      <ProfileRow icon={Hash} label="ESIC Number" value={emp.esic_number} />
                     </ProfileSection>
 
-                    {/* Bank Details */}
+                    {/* Bank Details — always show section */}
                     <ProfileSection title="Bank Details">
-                      {emp.bank_name && <ProfileRow icon={CreditCard} label="Bank Name" value={emp.bank_name} />}
-                      {emp.account_holder_name && <ProfileRow icon={User} label="Account Holder" value={emp.account_holder_name} />}
-                      {emp.account_number && <ProfileRow icon={CreditCard} label="Account Number" value={emp.account_number} />}
-                      {emp.ifsc_code && <ProfileRow icon={Hash} label="IFSC Code" value={emp.ifsc_code} />}
+                      <ProfileRow icon={CreditCard} label="Bank Name" value={emp.bank_name} />
+                      <ProfileRow icon={User} label="Account Holder" value={emp.account_holder_name} />
+                      <ProfileRow icon={CreditCard} label="Account Number" value={emp.account_number} />
+                      <ProfileRow icon={Hash} label="IFSC Code" value={emp.ifsc_code} />
                     </ProfileSection>
 
-                    {/* Emergency Contact */}
-                    {emp.emergency_contact_name && (
-                      <ProfileSection title="Emergency Contact">
-                        <ProfileRow icon={UsersRound} label="Contact Name" value={emp.emergency_contact_name} />
-                        {emp.emergency_contact_relation && <ProfileRow icon={UsersRound} label="Relation" value={emp.emergency_contact_relation} />}
-                      </ProfileSection>
-                    )}
+                    {/* Emergency Contact — always show section */}
+                    <ProfileSection title="Emergency Contact">
+                      <ProfileRow icon={UsersRound} label="Contact Name" value={emp.emergency_contact_name} />
+                      <ProfileRow icon={UsersRound} label="Relation" value={emp.emergency_contact_relation} />
+                    </ProfileSection>
 
-                    {/* Nominee */}
-                    {emp.nominee_name && (
-                      <ProfileSection title="Nominee">
-                        <ProfileRow icon={UsersRound} label="Nominee Name" value={emp.nominee_name} />
-                        {emp.nominee_relationship && <ProfileRow icon={UsersRound} label="Relationship" value={emp.nominee_relationship} />}
-                        {emp.nominee_dob && <ProfileRow icon={Calendar} label="Nominee DOB" value={formatDate(emp.nominee_dob)} />}
-                        {emp.nominee_contact && <ProfileRow icon={Phone} label="Nominee Contact" value={emp.nominee_contact} />}
-                      </ProfileSection>
-                    )}
+                    {/* Nominee — always show section */}
+                    <ProfileSection title="Nominee">
+                      <ProfileRow icon={UsersRound} label="Nominee Name" value={emp.nominee_name} />
+                      <ProfileRow icon={UsersRound} label="Relationship" value={emp.nominee_relationship} />
+                      <ProfileRow icon={Calendar} label="Nominee DOB" value={emp.nominee_dob ? formatDate(emp.nominee_dob) : undefined} />
+                      <ProfileRow icon={Phone} label="Nominee Contact" value={emp.nominee_contact} />
+                    </ProfileSection>
 
-                    {/* Documents */}
-                    {(emp.aadhaar_front_url || emp.aadhaar_back_url || emp.bank_document_url) && (
-                      <ProfileSection title="Documents">
-                        {emp.aadhaar_front_url && (
-                          <DocThumbnail
-                            label="Aadhaar Front"
-                            url={getFileUrl(emp.aadhaar_front_url)}
-                            onClick={() => setViewingDoc({ url: getFileUrl(emp.aadhaar_front_url), title: 'Aadhaar Front' })}
-                          />
-                        )}
-                        {emp.aadhaar_back_url && (
-                          <DocThumbnail
-                            label="Aadhaar Back"
-                            url={getFileUrl(emp.aadhaar_back_url)}
-                            onClick={() => setViewingDoc({ url: getFileUrl(emp.aadhaar_back_url), title: 'Aadhaar Back' })}
-                          />
-                        )}
-                        {emp.bank_document_url && (
-                          <DocThumbnail
-                            label="Bank Document"
-                            url={getFileUrl(emp.bank_document_url)}
-                            onClick={() => setViewingDoc({ url: getFileUrl(emp.bank_document_url), title: 'Bank Document' })}
-                          />
-                        )}
-                      </ProfileSection>
-                    )}
+                    {/* Documents — always show section */}
+                    <ProfileSection title="Documents">
+                      {emp.aadhaar_front_url ? (
+                        <DocThumbnail
+                          label="Aadhaar Front"
+                          url={getFileUrl(emp.aadhaar_front_url)}
+                          onClick={() => setViewingDoc({ url: getFileUrl(emp.aadhaar_front_url), title: 'Aadhaar Front' })}
+                        />
+                      ) : (
+                        <ProfileRow icon={FileText} label="Aadhaar Front" value={undefined} />
+                      )}
+                      {emp.aadhaar_back_url ? (
+                        <DocThumbnail
+                          label="Aadhaar Back"
+                          url={getFileUrl(emp.aadhaar_back_url)}
+                          onClick={() => setViewingDoc({ url: getFileUrl(emp.aadhaar_back_url), title: 'Aadhaar Back' })}
+                        />
+                      ) : (
+                        <ProfileRow icon={FileText} label="Aadhaar Back" value={undefined} />
+                      )}
+                      {emp.bank_document_url ? (
+                        <DocThumbnail
+                          label="Bank Document"
+                          url={getFileUrl(emp.bank_document_url)}
+                          onClick={() => setViewingDoc({ url: getFileUrl(emp.bank_document_url), title: 'Bank Document' })}
+                        />
+                      ) : (
+                        <ProfileRow icon={FileText} label="Bank Document" value={undefined} />
+                      )}
+                    </ProfileSection>
                   </div>
                 </>
               )}
@@ -660,14 +657,16 @@ function ProfileRow({
 }: {
   icon: typeof User;
   label: string;
-  value: string;
+  value?: string;
 }) {
   return (
     <div className="flex items-start gap-3">
       <Icon className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
       <div className="flex flex-col">
         <span className="text-xs text-muted-foreground">{label}</span>
-        <span className="text-sm font-medium">{value}</span>
+        <span className={cn("text-sm font-medium", !value && "text-muted-foreground/50 italic")}>
+          {value || '—'}
+        </span>
       </div>
     </div>
   );
