@@ -229,14 +229,18 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
       {/* Header */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b">
         <div className="flex items-center gap-3 px-4 h-14">
-          <Avatar className="w-9 h-9 border border-emerald-200">
-            <AvatarImage src={getFileUrl(emp.profile_pic_url) || undefined} alt={emp.full_name} />
-            <AvatarFallback className="bg-emerald-100 text-emerald-700 text-xs font-bold">{initials}</AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
+          <button className="shrink-0" onClick={() => navigate('profile')} title="View Profile">
+            <Avatar className="w-9 h-9 border border-emerald-200">
+              <AvatarImage src={getFileUrl(emp.profile_pic_url) || undefined} alt={emp.full_name} />
+              <AvatarFallback className="bg-emerald-100 text-emerald-700 text-xs font-bold">{initials}</AvatarFallback>
+            </Avatar>
+          </button>
+          <button className="flex-1 min-w-0 text-left" onClick={() => navigate('profile')} title="View Profile">
             <p className="text-sm font-semibold text-gray-900 truncate">{emp.full_name}</p>
-            <p className="text-xs text-gray-500 truncate">{emp.designation || emp.employee_role || 'Employee'}</p>
-          </div>
+            <p className="text-xs text-gray-500 truncate">
+              {emp.employee_code || `EMP-${emp.id}`}{emp.designation ? ` · ${emp.designation}` : ''}
+            </p>
+          </button>
           <button
             onClick={() => navigate('new-registration')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition-colors"

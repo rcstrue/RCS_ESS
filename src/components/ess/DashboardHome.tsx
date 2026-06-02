@@ -312,15 +312,18 @@ export default function DashboardHome({
         {canApprove(role) && (
           <SummaryCard loading={loading} icon={<CheckCircle2 className="w-3.5 h-3.5 text-amber-500" />} label="Approvals" value={String((dashboardData?.pendingLeaves ?? 0) + (dashboardData?.pendingExpenses ?? 0))} subtext="Pending action" />
         )}
-        <SummaryCard loading={loading} icon={<LogIn className="w-3.5 h-3.5 text-emerald-500" />} label="Today" value={dashboardData?.todayAttendance
-            ? dashboardData.todayAttendance.status === 'checked_in'
-              ? 'Checked In'
-              : dashboardData.todayAttendance.status === 'checked_out'
-                ? 'Checked Out'
-                : dashboardData.todayAttendance.status === 'present'
-                  ? 'Present'
-                  : 'Not marked'
-            : 'Not marked'} subtext="Attendance" />
+        <SummaryCard loading={loading} icon={<LogIn className="w-3.5 h-3.5 text-emerald-500" />} label="Today" value={(() => {
+            const s = dashboardData?.todayAttendance?.status;
+            if (!s || s === 'absent') return 'Not marked';
+            if (s === 'checked_in') return 'Checked In';
+            if (s === 'checked_out') return 'Checked Out';
+            if (s === 'present') return 'Present';
+            if (s === 'late') return 'Late';
+            if (s === 'half_day') return 'Half Day';
+            if (s === 'leave') return 'On Leave';
+            if (s === 'holiday') return 'Holiday';
+            return s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ');
+          })()} subtext="Attendance" />
         <SummaryCard loading={loading} icon={<ListTodo className="w-3.5 h-3.5 text-violet-500" />} label="Tasks" value={String(dashboardData?.pendingTasks ?? 0)} subtext="Pending" />
       </div>
 
