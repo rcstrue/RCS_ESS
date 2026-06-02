@@ -8,6 +8,7 @@ import { getFileUrl, resetSessionExpiredGuard } from '@/lib/api/config';
 // Extracted modules
 import LoginScreen from './LoginScreen';
 import ForceChangePin from './ForceChangePin';
+import FirstLoginPinPopup from './FirstLoginPinPopup';
 import DashboardHome from './DashboardHome';
 import ProfileView from './ProfileView';
 import SettingsView from './SettingsView';
@@ -41,6 +42,7 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
   const [session, setSession] = useState<ESSSession | null>(null);
   const [forcePinSession, setForcePinSession] = useState<ESSSession | null>(null);
   const [isFirstLogin, setIsFirstLogin] = useState(false);
+  const [showFirstLoginPopup, setShowFirstLoginPopup] = useState(false);
   const [authReady, setAuthReady] = useState(false);
 
   const loadSession = useCallback(() => {
@@ -49,7 +51,7 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
       if (stored) {
         const parsed = JSON.parse(stored) as ESSSession;
         if (parsed?.employee?.id) {
-          // If user hasn't completed PIN change, redirect to force PIN screen
+          // If user hasn't completed PIN change, show the popup (not full screen)
           if (!parsed.has_custom_pin) {
             setForcePinSession(parsed);
             setIsFirstLogin(true);
@@ -67,13 +69,28 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
     localStorage.removeItem('ess_employee');
   }, []);
 
-  useEffect(() => { loadSession(); setAuthReady(true); }, [loadSession]);
+  useEffect(() => {
+    loadSession();
+    setAuthReady(true);
+  }, [loadSession]);
+
+  // Show first-login popup once when forcePinSession is set
+  useEffect(() => {
+    if (forcePinSession && isFirstLogin && !session) {
+      // Small delay so the dashboard renders behind the popup
+      const timer = setTimeout(() => {
+        setShowFirstLoginPopup(true);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [forcePinSession, isFirstLogin, session]);
 
   // ── Listen for session expiry (401 interceptor dispatches this) ──
   useEffect(() => {
     const handler = () => {
       setSession(null);
       setForcePinSession(null);
+      setShowFirstLoginPopup(false);
       setCurrentPage('dashboard');
       toast.error('Session expired. Please login again.');
     };
@@ -92,6 +109,7 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
     localStorage.removeItem('ess_token');
     setSession(null);
     setForcePinSession(null);
+    setShowFirstLoginPopup(false);
     setCurrentPage('dashboard');
     toast.success('Logged out successfully');
   }, []);
@@ -104,14 +122,25 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
   const handleForcePinChange = useCallback((s: ESSSession) => {
     setForcePinSession(s);
     setIsFirstLogin(true);
-    // Persist to localStorage immediately — mobile can lose ess_token under storage pressure
-    // Store in BOTH keys for reliability
+    // Persist to localStorage immediately
     localStorage.setItem('ess_employee', JSON.stringify(s));
     if (s.token) {
       localStorage.setItem('ess_token', s.token);
     }
   }, []);
 
+  // Called when first-login popup completes (user sets PIN or cancels)
+  const handleFirstLoginComplete = useCallback((s: ESSSession) => {
+    setForcePinSession(null);
+    setIsFirstLogin(false);
+    setShowFirstLoginPopup(false);
+    saveSession(s);
+    if (s.has_custom_pin) {
+      toast.success(`Welcome, ${s.employee.full_name}!`);
+    }
+  }, [saveSession]);
+
+  // Called when force PIN change completes (from full-screen ForceChangePin)
   const handleForcePinComplete = useCallback((s: ESSSession) => {
     setForcePinSession(null);
     setIsFirstLogin(false);
@@ -126,11 +155,11 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
   const navigate = useCallback((page: string) => {
     if (page === 'logout') { clearSession(); return; }
     if (page === 'new-registration') {
-      // Clear ESS session and navigate to registration page
       localStorage.removeItem('ess_employee');
       localStorage.removeItem('ess_token');
       setSession(null);
       setForcePinSession(null);
+      setShowFirstLoginPopup(false);
       window.location.hash = '/';
       return;
     }
@@ -142,7 +171,6 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
   // ── Dashboard ──
   const { dashboardData, dashboardLoading, checkInLoading, checkOutLoading, loadDashboardData, handleCheckIn, handleCheckOut } = useDashboard(session);
 
-  // Refresh when navigating BACK to dashboard (skip initial mount — useDashboard handles that)
   const isFirstMount = useRef(true);
   useEffect(() => {
     if (isFirstMount.current) {
@@ -161,19 +189,20 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
     );
   }
 
-  // ── Force PIN change screen ──
-  if (forcePinSession) {
+  // ── Force PIN change (full screen — only used for non-first-login forced changes) ──
+  if (forcePinSession && !isFirstLogin && !showFirstLoginPopup) {
     return (
       <ForceChangePin
         session={forcePinSession}
         onComplete={handleForcePinComplete}
         onLogout={clearSession}
-        isFirstLogin={isFirstLogin}
+        isFirstLogin={false}
       />
     );
   }
 
-  if (!session) {
+  // ── First login: show dashboard with PIN popup overlay ──
+  if (!session && !forcePinSession) {
     return (
       <LoginScreen
         onLogin={handleLogin}
@@ -183,9 +212,12 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
     );
   }
 
-  // ── Derived ──
-  const emp = session.employee;
-  const role = session.role;
+  // For first login, create a temporary session to render the dashboard behind the popup
+  const activeSession = session || forcePinSession;
+  if (!activeSession) return null;
+
+  const emp = activeSession.employee;
+  const role = activeSession.role;
   const scope = getScope(role);
   const initials = getInitials(emp.full_name || 'U');
   const isApprover = canApprove(role);
@@ -247,6 +279,16 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
       </main>
 
       <BottomNav currentPage={currentPage} showMoreMenu={showMoreMenu} setShowMoreMenu={setShowMoreMenu} onNavigate={navigate} />
+
+      {/* First Login PIN Popup */}
+      {forcePinSession && (
+        <FirstLoginPinPopup
+          open={showFirstLoginPopup}
+          session={forcePinSession}
+          onComplete={handleFirstLoginComplete}
+          onDismiss={handleFirstLoginComplete}
+        />
+      )}
     </div>
   );
 }

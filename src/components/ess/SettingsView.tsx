@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import type { Employee } from '@/lib/ess-types';
+import { ChangePinDialog } from './ChangePinDialog';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,6 +13,7 @@ import {
   Shield,
   Building2,
   LogOut,
+  KeyRound,
 } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════
@@ -26,6 +28,7 @@ export default function SettingsView({
   onLogout: () => void;
 }) {
   const [darkMode, setDarkMode] = useState(false);
+  const [pinDialogOpen, setPinDialogOpen] = useState(false);
 
   useEffect(() => {
     const isDark = document.documentElement.classList.contains('dark');
@@ -45,6 +48,27 @@ export default function SettingsView({
         <h2 className="text-xl font-bold text-gray-900">Settings</h2>
         <p className="text-sm text-gray-500">Manage your app preferences</p>
       </div>
+
+      {/* Change PIN */}
+      <Card className="border-0 shadow-sm">
+        <CardContent className="p-4">
+          <button
+            onClick={() => setPinDialogOpen(true)}
+            className="flex items-center justify-between w-full text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center w-9 h-9 rounded-full bg-amber-50">
+                <KeyRound className="w-4 h-4 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-800">Change PIN</p>
+                <p className="text-xs text-gray-400">Update your 4-digit login PIN</p>
+              </div>
+            </div>
+            <span className="text-gray-400 text-lg">&rsaquo;</span>
+          </button>
+        </CardContent>
+      </Card>
 
       {/* Dark Mode */}
       <Card className="border-0 shadow-sm">
@@ -114,6 +138,13 @@ export default function SettingsView({
           </p>
         </CardContent>
       </Card>
+
+      {/* Change PIN Dialog */}
+      <ChangePinDialog
+        open={pinDialogOpen}
+        onOpenChange={setPinDialogOpen}
+        employeeId={employee.id}
+      />
     </div>
   );
 }
