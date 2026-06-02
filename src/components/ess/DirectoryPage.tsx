@@ -18,12 +18,20 @@ import {
   Shield,
   IdCard,
   Inbox,
+  CreditCard,
+  Heart,
+  Hash,
+  UsersRound,
+  FileText,
+  Clock,
+  Eye,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { getFileUrl } from '@/lib/api/config';
 import {
   fetchEmployees,
+  fetchEmployeeById,
   fetchClients,
   fetchUnits,
 } from '@/lib/ess-api';
@@ -73,7 +81,6 @@ function getInitials(name: string): string {
 
 function maskMobile(mobile: string): string {
   if (!mobile || mobile.length < 5) return mobile;
-  // Format: 98XXX XXXXX (first 2 visible, rest masked)
   return `${mobile.slice(0, 2)}XXX XXX${mobile.length > 9 ? 'X' : ''}`;
 }
 
@@ -119,6 +126,8 @@ export default function DirectoryPage({
   // Profile dialog
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [viewingDoc, setViewingDoc] = useState<{ url: string; title: string } | null>(null);
 
   // ── Load filter options ──
   const loadFilters = useCallback(async () => {
@@ -198,11 +207,25 @@ export default function DirectoryPage({
 
   const hasActiveFilters = searchQuery || selectedClient || selectedUnit;
 
-  // ── Open profile dialog ──
-  const openProfile = (emp: Employee) => {
+  // ── Open profile dialog with full details ──
+  const openProfile = async (emp: Employee) => {
     setSelectedEmployee(emp);
     setProfileOpen(true);
+    setProfileLoading(true);
+    try {
+      const { data: fullEmp } = await fetchEmployeeById(emp.id);
+      if (fullEmp) {
+        setSelectedEmployee(fullEmp);
+      }
+    } catch (err) {
+      console.error('Failed to fetch full employee details:', err);
+      // Keep the basic data from the list
+    } finally {
+      setProfileLoading(false);
+    }
   };
+
+  const emp = selectedEmployee;
 
   // ── Render ──
   return (
@@ -276,7 +299,7 @@ export default function DirectoryPage({
           <span className="text-xs text-muted-foreground">Active filters:</span>
           {searchQuery && (
             <Badge variant="secondary" className="gap-1 text-xs">
-              "{searchQuery}"
+              &ldquo;{searchQuery}&rdquo;
               <button onClick={() => { setSearchQuery(''); setSearchInput(''); }}>
                 <X className="h-3 w-3" />
               </button>
@@ -434,98 +457,197 @@ export default function DirectoryPage({
         </>
       )}
 
-      {/* ── Profile Dialog ── */}
+      {/* ── Profile Dialog (Full Detail) ── */}
       <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
-          {selectedEmployee && (
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md p-0">
+          {emp && (
             <>
-              <DialogHeader>
-                <DialogTitle className="text-center">Employee Profile</DialogTitle>
-              </DialogHeader>
-
-              <div className="flex flex-col items-center gap-4 py-2">
-                {/* Avatar + Status */}
-                <div className="relative">
-                  <Avatar className="h-20 w-20">
-                    <AvatarImage src={getFileUrl(selectedEmployee.profile_pic_url) || undefined} alt={selectedEmployee.full_name} />
-                    <AvatarFallback className="bg-primary/10 text-primary text-xl font-semibold">
-                      {getInitials(selectedEmployee.full_name || 'U')}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span
-                    className={cn(
-                      'absolute bottom-1 right-1 h-4 w-4 rounded-full border-2 border-background',
-                      isActive(selectedEmployee) ? 'bg-emerald-500' : 'bg-slate-400'
-                    )}
-                  />
+              {profileLoading ? (
+                <div className="flex items-center justify-center py-20">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
+              ) : (
+                <>
+                  {/* Header with avatar */}
+                  <div className="flex flex-col items-center gap-3 pt-6 pb-4 px-4">
+                    <div className="relative">
+                      <Avatar className="h-20 w-20 border-2 border-primary/20">
+                        <AvatarImage src={getFileUrl(emp.profile_pic_cropped_url || emp.profile_pic_url) || undefined} alt={emp.full_name} />
+                        <AvatarFallback className="bg-primary/10 text-primary text-xl font-semibold">
+                          {getInitials(emp.full_name || 'U')}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span
+                        className={cn(
+                          'absolute bottom-1 right-1 h-4 w-4 rounded-full border-2 border-background',
+                          isActive(emp) ? 'bg-emerald-500' : 'bg-slate-400'
+                        )}
+                      />
+                    </div>
+                    <div className="text-center">
+                      <h3 className="text-lg font-bold">{emp.full_name}</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {emp.employee_code || `EMP-${emp.id}`}
+                      </p>
+                      <div className="flex items-center justify-center gap-2 mt-1">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            isActive(emp)
+                              ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                              : 'bg-slate-100 text-slate-500 border-slate-200'
+                          )}
+                        >
+                          {isActive(emp) ? 'Active' : 'Inactive'}
+                        </Badge>
+                        {emp.designation && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            {emp.designation}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
 
-                {/* Name + Code */}
-                <div className="text-center">
-                  <h3 className="text-lg font-bold">{selectedEmployee.full_name}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedEmployee.employee_code || `EMP-${selectedEmployee.id}`}
-                  </p>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      'mt-1',
-                      isActive(selectedEmployee)
-                        ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-                        : 'bg-slate-100 text-slate-500 border-slate-200'
+                  <div className="px-4 pb-6 space-y-4">
+                    {/* Personal Information */}
+                    <ProfileSection title="Personal">
+                      {emp.father_name && <ProfileRow icon={User} label="Father/Husband Name" value={emp.father_name} />}
+                      {emp.date_of_birth && <ProfileRow icon={Calendar} label="Date of Birth" value={formatDate(emp.date_of_birth)} />}
+                      {emp.gender && <ProfileRow icon={User} label="Gender" value={emp.gender} />}
+                      {emp.marital_status && <ProfileRow icon={Heart} label="Marital Status" value={emp.marital_status} />}
+                      {emp.blood_group && <ProfileRow icon={Heart} label="Blood Group" value={emp.blood_group} />}
+                    </ProfileSection>
+
+                    {/* Contact */}
+                    <ProfileSection title="Contact">
+                      {emp.mobile_number && <ProfileRow icon={Phone} label="Mobile" value={maskMobile(emp.mobile_number)} />}
+                      {emp.alternate_mobile && <ProfileRow icon={Phone} label="Alternate Mobile" value={maskMobile(emp.alternate_mobile)} />}
+                      {emp.email && <ProfileRow icon={Mail} label="Email" value={emp.email} />}
+                      {emp.address && <ProfileRow icon={MapPin} label="Address" value={emp.address} />}
+                      {(emp.city || emp.district || emp.state) && (
+                        <ProfileRow
+                          icon={MapPin}
+                          label="Location"
+                          value={[emp.city, emp.district, emp.state].filter(Boolean).join(', ')}
+                        />
+                      )}
+                      {emp.pin_code && <ProfileRow icon={Hash} label="PIN Code" value={emp.pin_code} />}
+                    </ProfileSection>
+
+                    {/* Employment */}
+                    <ProfileSection title="Employment">
+                      {(emp.client_name || emp.unit_name) && (
+                        <ProfileRow
+                          icon={Building2}
+                          label="Client / Unit"
+                          value={[emp.client_name, emp.unit_name].filter(Boolean).join(' / ')}
+                        />
+                      )}
+                      {emp.department && <ProfileRow icon={Building2} label="Department" value={emp.department} />}
+                      {emp.employment_type && <ProfileRow icon={Briefcase} label="Employment Type" value={emp.employment_type} />}
+                      {emp.worker_category && <ProfileRow icon={Shield} label="Worker Category" value={emp.worker_category} />}
+                      {emp.employee_role && <ProfileRow icon={IdCard} label="Role" value={emp.employee_role} />}
+                      {emp.date_of_joining && <ProfileRow icon={Clock} label="Date of Joining" value={formatDate(emp.date_of_joining)} />}
+                      {emp.confirmation_date && <ProfileRow icon={Calendar} label="Confirmation Date" value={formatDate(emp.confirmation_date)} />}
+                      {emp.probation_period && <ProfileRow icon={Clock} label="Probation Period" value={`${emp.probation_period} months`} />}
+                      {emp.date_of_leaving && <ProfileRow icon={Calendar} label="Date of Leaving" value={formatDate(emp.date_of_leaving)} />}
+                    </ProfileSection>
+
+                    {/* IDs */}
+                    <ProfileSection title="Government IDs">
+                      {emp.aadhaar_number && <ProfileRow icon={IdCard} label="Aadhaar Number" value={emp.aadhaar_number} />}
+                      {emp.uan_number && <ProfileRow icon={Hash} label="UAN Number" value={emp.uan_number} />}
+                      {emp.esic_number && <ProfileRow icon={Hash} label="ESIC Number" value={emp.esic_number} />}
+                    </ProfileSection>
+
+                    {/* Bank Details */}
+                    <ProfileSection title="Bank Details">
+                      {emp.bank_name && <ProfileRow icon={CreditCard} label="Bank Name" value={emp.bank_name} />}
+                      {emp.account_holder_name && <ProfileRow icon={User} label="Account Holder" value={emp.account_holder_name} />}
+                      {emp.account_number && <ProfileRow icon={CreditCard} label="Account Number" value={emp.account_number} />}
+                      {emp.ifsc_code && <ProfileRow icon={Hash} label="IFSC Code" value={emp.ifsc_code} />}
+                    </ProfileSection>
+
+                    {/* Emergency Contact */}
+                    {emp.emergency_contact_name && (
+                      <ProfileSection title="Emergency Contact">
+                        <ProfileRow icon={UsersRound} label="Contact Name" value={emp.emergency_contact_name} />
+                        {emp.emergency_contact_relation && <ProfileRow icon={UsersRound} label="Relation" value={emp.emergency_contact_relation} />}
+                      </ProfileSection>
                     )}
-                  >
-                    {isActive(selectedEmployee) ? 'Active' : 'Inactive'}
-                  </Badge>
-                </div>
-              </div>
 
-              <Separator />
+                    {/* Nominee */}
+                    {emp.nominee_name && (
+                      <ProfileSection title="Nominee">
+                        <ProfileRow icon={UsersRound} label="Nominee Name" value={emp.nominee_name} />
+                        {emp.nominee_relationship && <ProfileRow icon={UsersRound} label="Relationship" value={emp.nominee_relationship} />}
+                        {emp.nominee_dob && <ProfileRow icon={Calendar} label="Nominee DOB" value={formatDate(emp.nominee_dob)} />}
+                        {emp.nominee_contact && <ProfileRow icon={Phone} label="Nominee Contact" value={emp.nominee_contact} />}
+                      </ProfileSection>
+                    )}
 
-              {/* Details */}
-              <div className="space-y-3 text-sm">
-                {selectedEmployee.designation && (
-                  <ProfileRow icon={Briefcase} label="Designation" value={selectedEmployee.designation} />
-                )}
-                {selectedEmployee.department && (
-                  <ProfileRow icon={Building2} label="Department" value={selectedEmployee.department} />
-                )}
-                {(selectedEmployee.client_name || selectedEmployee.unit_name) && (
-                  <ProfileRow
-                    icon={Building2}
-                    label="Client / Unit"
-                    value={[selectedEmployee.client_name, selectedEmployee.unit_name].filter(Boolean).join(' / ')}
-                  />
-                )}
-                {selectedEmployee.employment_type && (
-                  <ProfileRow icon={User} label="Employment Type" value={selectedEmployee.employment_type} />
-                )}
-                {selectedEmployee.worker_category && (
-                  <ProfileRow icon={Shield} label="Category" value={selectedEmployee.worker_category} />
-                )}
-                {selectedEmployee.mobile_number && (
-                  <ProfileRow icon={Phone} label="Mobile" value={maskMobile(selectedEmployee.mobile_number)} />
-                )}
-                {selectedEmployee.email && (
-                  <ProfileRow icon={Mail} label="Email" value={selectedEmployee.email} />
-                )}
-                {selectedEmployee.date_of_joining && (
-                  <ProfileRow icon={Calendar} label="Date of Joining" value={formatDate(selectedEmployee.date_of_joining)} />
-                )}
-                {selectedEmployee.date_of_leaving && (
-                  <ProfileRow icon={Calendar} label="Date of Leaving" value={formatDate(selectedEmployee.date_of_leaving)} />
-                )}
-                {selectedEmployee.employee_role && (
-                  <ProfileRow icon={IdCard} label="Role" value={selectedEmployee.employee_role} />
-                )}
-                {selectedEmployee.city && (
-                  <ProfileRow icon={MapPin} label="City" value={selectedEmployee.city} />
-                )}
-              </div>
+                    {/* Documents */}
+                    {(emp.aadhaar_front_url || emp.aadhaar_back_url || emp.bank_document_url) && (
+                      <ProfileSection title="Documents">
+                        {emp.aadhaar_front_url && (
+                          <DocThumbnail
+                            label="Aadhaar Front"
+                            url={getFileUrl(emp.aadhaar_front_url)}
+                            onClick={() => setViewingDoc({ url: getFileUrl(emp.aadhaar_front_url), title: 'Aadhaar Front' })}
+                          />
+                        )}
+                        {emp.aadhaar_back_url && (
+                          <DocThumbnail
+                            label="Aadhaar Back"
+                            url={getFileUrl(emp.aadhaar_back_url)}
+                            onClick={() => setViewingDoc({ url: getFileUrl(emp.aadhaar_back_url), title: 'Aadhaar Back' })}
+                          />
+                        )}
+                        {emp.bank_document_url && (
+                          <DocThumbnail
+                            label="Bank Document"
+                            url={getFileUrl(emp.bank_document_url)}
+                            onClick={() => setViewingDoc({ url: getFileUrl(emp.bank_document_url), title: 'Bank Document' })}
+                          />
+                        )}
+                      </ProfileSection>
+                    )}
+                  </div>
+                </>
+              )}
             </>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ── Document Viewer Dialog ── */}
+      <Dialog open={!!viewingDoc} onOpenChange={() => setViewingDoc(null)}>
+        <DialogContent className="sm:max-w-lg p-0">
+          <DialogHeader className="p-3 border-b">
+            <DialogTitle className="text-sm">{viewingDoc?.title}</DialogTitle>
+          </DialogHeader>
+          <div className="p-2">
+            {viewingDoc?.url && (
+              <img
+                src={viewingDoc.url}
+                alt={viewingDoc.title}
+                className="w-full rounded-lg"
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ── Profile Section ────────────────────────────────────
+function ProfileSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <h4 className="text-xs font-semibold text-primary uppercase tracking-wider">{title}</h4>
+      <div className="space-y-2">{children}</div>
     </div>
   );
 }
@@ -545,8 +667,38 @@ function ProfileRow({
       <Icon className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
       <div className="flex flex-col">
         <span className="text-xs text-muted-foreground">{label}</span>
-        <span className="font-medium">{value}</span>
+        <span className="text-sm font-medium">{value}</span>
       </div>
     </div>
+  );
+}
+
+// ── Document Thumbnail ──────────────────────────────────
+function DocThumbnail({
+  label,
+  url,
+  onClick,
+}: {
+  label: string;
+  url: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-3 p-2 rounded-lg border hover:bg-accent/30 transition-colors text-left w-full"
+    >
+      <img
+        src={url}
+        alt={label}
+        className="h-10 w-14 rounded object-cover border"
+      />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate">{label}</p>
+        <p className="text-xs text-muted-foreground flex items-center gap-1">
+          <Eye className="h-3 w-3" /> Tap to view
+        </p>
+      </div>
+    </button>
   );
 }

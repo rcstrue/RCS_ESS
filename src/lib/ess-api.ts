@@ -220,6 +220,10 @@ export async function fetchUnits(scope?: string, requester_id?: number, client_i
 }
 
 // ===== Employees (Directory) =====
+export async function fetchEmployeeById(employeeId: number) {
+  return unwrap<Employee>(apiRequest<Employee>(`/ess/ess-employees/${employeeId}`));
+}
+
 export async function fetchEmployees(params: { scope?: string; requester_id?: number; limit?: number; page?: number; q?: string; client_id?: number; unit_id?: number }) {
   const searchParams = new URLSearchParams();
   if (params.scope) searchParams.set('scope', params.scope);

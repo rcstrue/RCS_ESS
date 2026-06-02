@@ -22,7 +22,16 @@ $method = $_SERVER['REQUEST_METHOD'];
 try {
     switch ($method) {
         case 'GET':
-            handleGet($conn);
+            // Check if fetching a single employee by ID
+            $pathParts = explode('/', trim(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), '/'));
+            // URL pattern: api/ess/ess-employees or api/ess/ess-employees/123
+            $endpointIndex = array_search('ess-employees', $pathParts);
+            if ($endpointIndex !== false && isset($pathParts[$endpointIndex + 1]) && is_numeric($pathParts[$endpointIndex + 1])) {
+                $targetId = (int)$pathParts[$endpointIndex + 1];
+                handleGetById($conn, $targetId);
+            } else {
+                handleGet($conn);
+            }
             break;
         default:
             jsonError('Method not allowed. Use GET.', 405);
@@ -235,4 +244,81 @@ function handleGet($conn) {
     }
 
     jsonResponse($response);
+}
+
+// ============================================================================
+// GET - Single Employee Detail by ID
+// ============================================================================
+function handleGetById($conn, $targetId) {
+    $stmt = $conn->prepare('
+        SELECT
+            e.id as employee_id,
+            e.employee_code,
+            e.full_name,
+            e.father_name,
+            e.mobile_number,
+            e.alternate_mobile,
+            e.email,
+            e.date_of_birth,
+            e.gender,
+            e.blood_group,
+            e.marital_status,
+            e.aadhaar_number,
+            e.uan_number,
+            e.esic_number,
+            e.address,
+            e.pin_code,
+            e.state,
+            e.district,
+            e.bank_name,
+            e.account_number,
+            e.ifsc_code,
+            e.account_holder_name,
+            e.designation,
+            e.department,
+            e.employment_type,
+            e.worker_category,
+            e.employee_role,
+            e.app_role,
+            e.status,
+            e.date_of_joining,
+            e.confirmation_date,
+            e.probation_period,
+            e.date_of_leaving,
+            e.profile_pic_url,
+            e.profile_pic_cropped_url,
+            e.aadhaar_front_url,
+            e.aadhaar_back_url,
+            e.bank_document_url,
+            e.nominee_name,
+            e.nominee_relationship,
+            e.nominee_dob,
+            e.nominee_contact,
+            e.emergency_contact_name,
+            e.emergency_contact_relation,
+            e.client_id,
+            e.unit_id,
+            e.created_at,
+            c.name as client_name,
+            u.name as unit_name,
+            COALESCE(u.city, e.district) as city
+        FROM employees e
+        LEFT JOIN clients c ON e.client_id = c.id
+        LEFT JOIN units u ON e.unit_id = u.id
+        WHERE e.id = ? AND e.status = "approved"
+        LIMIT 1
+    ');
+    $stmt->bind_param('i', $targetId);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$row) {
+        jsonError('Employee not found', 404);
+    }
+
+    jsonResponse([
+        'success' => true,
+        'data' => $row
+    ]);
 }
