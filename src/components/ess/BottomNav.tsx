@@ -4,6 +4,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Separator } from '@/components/ui/separator';
 import { ChevronRight, LogOut } from 'lucide-react';
 import { NAV_ITEMS, MORE_MENU_ITEMS } from './constants';
+import type { EmployeeRole } from '@/lib/ess-types';
 
 // ══════════════════════════════════════════════════════════════
 // Bottom Navigation Bar
@@ -14,15 +15,28 @@ interface BottomNavProps {
   showMoreMenu: boolean;
   setShowMoreMenu: (open: boolean) => void;
   onNavigate: (page: string) => void;
+  role: EmployeeRole;
 }
 
-export default function BottomNav({ currentPage, showMoreMenu, setShowMoreMenu, onNavigate }: BottomNavProps) {
+// Only manager+ roles can see the Employees (Directory) page
+function canViewDirectory(role: EmployeeRole): boolean {
+  return role === 'manager' || role === 'regional_manager';
+}
+
+export default function BottomNav({ currentPage, showMoreMenu, setShowMoreMenu, onNavigate, role }: BottomNavProps) {
+  const filteredNavItems = NAV_ITEMS.filter((item) => {
+    if (item.key === 'directory') return canViewDirectory(role);
+    return true;
+  });
+
+  const visibleBottomKeys = filteredNavItems.map((item) => item.key);
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t safe-area-bottom">
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-2">
-        {NAV_ITEMS.map((item) => {
+        {filteredNavItems.map((item) => {
           const isActive = item.key === '_more'
-            ? !['dashboard', 'directory', 'expenses'].includes(currentPage)
+            ? !visibleBottomKeys.includes(currentPage) && currentPage !== 'dashboard'
             : item.key === currentPage;
 
           if (item.key === '_more') {

@@ -284,7 +284,7 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
             />
           </div>
         )}
-        {currentPage === 'directory' && <DirectoryPage employeeId={emp.id} role={role} scope={scope} />}
+        {currentPage === 'directory' && (role === 'manager' || role === 'regional_manager') && <DirectoryPage employeeId={emp.id} role={role} scope={scope} />}
         {currentPage === 'expenses' && <ExpensesPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} />}
         {currentPage === 'attendance' && <AttendancePage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} />}
         {currentPage === 'leaves' && <LeavesPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} />}
@@ -295,7 +295,7 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
         {currentPage === 'settings' && <SettingsView employee={emp} onLogout={clearSession} />}
       </main>
 
-      <BottomNav currentPage={currentPage} showMoreMenu={showMoreMenu} setShowMoreMenu={setShowMoreMenu} onNavigate={navigate} />
+      <BottomNav currentPage={currentPage} showMoreMenu={showMoreMenu} setShowMoreMenu={setShowMoreMenu} onNavigate={navigate} role={role} />
 
       {/* First Login PIN Popup */}
       {forcePinSession && (
