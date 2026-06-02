@@ -223,9 +223,26 @@ function _determineRole($employee): string
     $appRole = strtolower($employee['app_role'] ?? '');
     $employeeRole = strtolower($employee['employee_role'] ?? '');
     $workerCategory = strtolower($employee['worker_category'] ?? '');
+    $designation = strtolower($employee['designation'] ?? '');
 
-    if (in_array($appRole, array('manager', 'regional_manager'))) return $appRole;
-    if (in_array($employeeRole, array('admin', 'manager'))) return $employeeRole;
+    // Regional Manager: highest priority
+    if ($appRole === 'regional_manager') return 'regional_manager';
+    if (strpos($employeeRole, 'regional') !== false) return 'regional_manager';
+    if (strpos($workerCategory, 'regional') !== false) return 'regional_manager';
+
+    // Manager / Field Officer / Area Manager
+    if ($appRole === 'manager') return 'manager';
+    if (in_array($employeeRole, array('admin', 'manager'))) return 'manager';
+    if (strpos($workerCategory, 'manager') !== false) return 'manager';
+    if (strpos($workerCategory, 'field officer') !== false) return 'manager';
+    if (strpos($workerCategory, 'area manager') !== false) return 'manager';
+    if (strpos($designation, 'field officer') !== false) return 'manager';
+    if (strpos($designation, 'area manager') !== false) return 'manager';
+
+    // Supervisor / Team Lead
     if (strpos($workerCategory, 'supervisor') !== false) return 'supervisor';
+    if (strpos($workerCategory, 'team lead') !== false) return 'supervisor';
+    if (strpos($employeeRole, 'supervisor') !== false) return 'supervisor';
+
     return 'employee';
 }

@@ -16,16 +16,22 @@ interface BottomNavProps {
   setShowMoreMenu: (open: boolean) => void;
   onNavigate: (page: string) => void;
   role: EmployeeRole;
+  isInstalled: boolean;
 }
 
 // Only manager+ roles can see the Employees (Directory) page
 function canViewDirectory(role: EmployeeRole): boolean {
-  return role === 'manager' || role === 'regional_manager';
+  return role === 'manager' || role === 'regional_manager' || role === 'admin';
 }
 
-export default function BottomNav({ currentPage, showMoreMenu, setShowMoreMenu, onNavigate, role }: BottomNavProps) {
+export default function BottomNav({ currentPage, showMoreMenu, setShowMoreMenu, onNavigate, role, isInstalled }: BottomNavProps) {
   const filteredNavItems = NAV_ITEMS.filter((item) => {
     if (item.key === 'directory') return canViewDirectory(role);
+    return true;
+  });
+
+  const filteredMoreItems = MORE_MENU_ITEMS.filter((item) => {
+    if (item.key === 'install-app') return !isInstalled;
     return true;
   });
 
@@ -54,7 +60,7 @@ export default function BottomNav({ currentPage, showMoreMenu, setShowMoreMenu, 
                     <SheetTitle className="text-center">More Options</SheetTitle>
                   </SheetHeader>
                   <div className="space-y-1 px-2 pb-4">
-                    {MORE_MENU_ITEMS.map((menuItem) => (
+                    {filteredMoreItems.map((menuItem) => (
                       <button key={menuItem.key} onClick={() => onNavigate(menuItem.key)} className="flex items-center gap-3 w-full p-3 rounded-xl hover:bg-gray-50 transition-colors text-left">
                         <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 shrink-0">
                           <menuItem.icon className="w-5 h-5 text-gray-600" />

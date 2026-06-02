@@ -13,11 +13,11 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 export interface PwaInstallState {
-  canInstall: boolean;
-  isInstalled: boolean;
-  isIOS: boolean;
+  canInstall: boolean;      // Native install prompt available (Chrome)
+  isInstalled: boolean;     // Running in standalone mode
+  isIOS: boolean;           // iOS Safari (no native prompt)
   isInStandaloneMode: boolean;
-  dismissed: boolean;
+  dismissed: boolean;       // User dismissed the banner
   permissions: {
     camera: PermissionState | 'unavailable';
     geolocation: PermissionState | 'unavailable';
@@ -113,7 +113,7 @@ export function usePwaInstall() {
     }
   }, [state.isInstalled, state.isInStandaloneMode, checkPermissions]);
 
-  // ── Install PWA ──
+  // ── Install PWA (Chrome native prompt) ──
   const install = useCallback(async () => {
     const prompt = deferredPromptRef.current;
     if (!prompt) return false;
@@ -153,7 +153,7 @@ export function usePwaInstall() {
       });
     } catch { results.geolocation = false; }
 
-    // Request camera (only way is to enumerate devices which triggers permission prompt)
+    // Request camera
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -173,10 +173,9 @@ export function usePwaInstall() {
   // ── Show permission dialog? ──
   const shouldShowPermissions = state.isInstalled && !permissionsRequested;
 
-  // ── Show install banner? ──
-  const shouldShowInstall = !state.dismissed && !state.isInstalled && (
-    state.canInstall || state.isIOS
-  );
+  // ── Show install banner?
+  // Always show unless dismissed or already installed in standalone mode
+  const shouldShowInstall = !state.dismissed && !state.isInStandaloneMode;
 
   return {
     state,

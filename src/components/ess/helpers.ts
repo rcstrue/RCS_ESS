@@ -8,9 +8,19 @@ import type { Employee, EmployeeRole } from '@/lib/ess-types';
 export function detectRole(employee: Employee): EmployeeRole {
   const category = (employee.worker_category || '').toLowerCase();
   const role = (employee.employee_role || '').toLowerCase();
+  const designation = (employee.designation || '').toLowerCase();
+
+  // Regional Manager
   if (category.includes('regional') || role.includes('regional')) return 'regional_manager';
-  if (category.includes('manager') || role.includes('manager')) return 'manager';
-  if (category.includes('supervisor') || role.includes('supervisor') || category.includes('team lead')) return 'supervisor';
+
+  // Manager / Field Officer / Area Manager
+  if (role === 'admin' || role === 'manager') return 'manager';
+  if (category.includes('manager') || category.includes('field officer') || category.includes('area manager')) return 'manager';
+  if (designation.includes('field officer') || designation.includes('area manager')) return 'manager';
+
+  // Supervisor / Team Lead
+  if (category.includes('supervisor') || category.includes('team lead') || role.includes('supervisor')) return 'supervisor';
+
   return 'employee';
 }
 

@@ -15,7 +15,10 @@ import {
   Settings,
   UserCircle,
   UserPlus,
+  Download,
 } from 'lucide-react';
+
+export const APP_VERSION = '2.0.0';
 
 export const NAV_ITEMS = [
   { key: 'dashboard', label: 'Home', icon: LayoutDashboard },
@@ -33,4 +36,5 @@ export const MORE_MENU_ITEMS = [
   { key: 'profile', label: 'My Profile', icon: UserCircle, description: 'View your profile details' },
   { key: 'settings', label: 'Settings', icon: Settings, description: 'App preferences' },
   { key: 'new-registration', label: 'New Registration', icon: UserPlus, description: 'Register a new employee' },
+  { key: 'install-app', label: 'Install App', icon: Download, description: 'Add to home screen for quick access' },
 ] as const;

@@ -154,6 +154,9 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
+  // ── PWA Install (must be before navigate which references pwa) ──
+  const pwa = usePwaInstall();
+
   const navigate = useCallback((page: string) => {
     if (page === 'logout') { clearSession(); return; }
     if (page === 'new-registration') {
@@ -165,16 +168,27 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
       window.location.hash = '/';
       return;
     }
+    if (page === 'install-app') {
+      // Try native install prompt, fallback to instructions
+      pwa.install().then((accepted) => {
+        if (!accepted && !pwa.state.canInstall) {
+          // Show instructions based on platform
+          const msg = pwa.state.isIOS
+            ? 'To install: Tap the Share button → "Add to Home Screen"'
+            : 'To install: Tap the menu (⋮) in your browser → "Install app" or "Add to Home Screen"';
+          toast.info(msg, { duration: 5000 });
+        }
+      });
+      setShowMoreMenu(false);
+      return;
+    }
     setCurrentPage(page);
     setShowMoreMenu(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [clearSession]);
+  }, [clearSession, pwa]);
 
   // ── Dashboard ──
   const { dashboardData, dashboardLoading, checkInLoading, checkOutLoading, loadDashboardData, handleCheckIn, handleCheckOut } = useDashboard(session);
-
-  // ── PWA Install ──
-  const pwa = usePwaInstall();
 
   const isFirstMount = useRef(true);
   useEffect(() => {
@@ -284,7 +298,7 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
             />
           </div>
         )}
-        {currentPage === 'directory' && (role === 'manager' || role === 'regional_manager') && <DirectoryPage employeeId={emp.id} role={role} scope={scope} />}
+        {currentPage === 'directory' && (role === 'manager' || role === 'regional_manager' || role === 'admin') && <DirectoryPage employeeId={emp.id} role={role} scope={scope} />}
         {currentPage === 'expenses' && <ExpensesPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} />}
         {currentPage === 'attendance' && <AttendancePage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} />}
         {currentPage === 'leaves' && <LeavesPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} />}
@@ -295,7 +309,7 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
         {currentPage === 'settings' && <SettingsView employee={emp} onLogout={clearSession} />}
       </main>
 
-      <BottomNav currentPage={currentPage} showMoreMenu={showMoreMenu} setShowMoreMenu={setShowMoreMenu} onNavigate={navigate} role={role} />
+      <BottomNav currentPage={currentPage} showMoreMenu={showMoreMenu} setShowMoreMenu={setShowMoreMenu} onNavigate={navigate} role={role} isInstalled={pwa.state.isInstalled} />
 
       {/* First Login PIN Popup */}
       {forcePinSession && (
