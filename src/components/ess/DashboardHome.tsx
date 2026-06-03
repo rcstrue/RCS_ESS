@@ -72,6 +72,20 @@ export default function DashboardHome({
     return () => clearInterval(timer);
   }, []);
 
+  // Attendance helpers (declared early — used by useEffect dependency arrays)
+  const att = dashboardData?.todayAttendance;
+  const hasApprovals = canApprove(role) && dashboardData
+    && (dashboardData.pendingLeaves + dashboardData.pendingExpenses) > 0;
+
+  const quickActions = [
+    { key: 'attendance', label: 'History', icon: CalendarDays, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    { key: 'leaves', label: 'Leave', icon: CalendarDays, color: 'text-blue-600', bg: 'bg-blue-50' },
+    { key: 'tasks', label: 'Tasks', icon: ClipboardList, color: 'text-violet-600', bg: 'bg-violet-50' },
+    { key: 'expenses', label: 'Expenses', icon: Receipt, color: 'text-amber-600', bg: 'bg-amber-50' },
+    { key: 'announcements', label: 'Notices', icon: Megaphone, color: 'text-rose-600', bg: 'bg-rose-50' },
+    { key: 'helpdesk', label: 'Help Desk', icon: CircleHelp, color: 'text-sky-600', bg: 'bg-sky-50' },
+  ];
+
   // Reverse geocode location name
   const [locationName, setLocationName] = useState<string | null>(null);
   useEffect(() => {
@@ -85,21 +99,6 @@ export default function DashboardHome({
       setLocationName(null);
     }
   }, [att?.latitude, att?.longitude]);
-
-  const hasApprovals = canApprove(role) && dashboardData
-    && (dashboardData.pendingLeaves + dashboardData.pendingExpenses) > 0;
-
-  const quickActions = [
-    { key: 'attendance', label: 'History', icon: CalendarDays, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-    { key: 'leaves', label: 'Leave', icon: CalendarDays, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { key: 'tasks', label: 'Tasks', icon: ClipboardList, color: 'text-violet-600', bg: 'bg-violet-50' },
-    { key: 'expenses', label: 'Expenses', icon: Receipt, color: 'text-amber-600', bg: 'bg-amber-50' },
-    { key: 'announcements', label: 'Notices', icon: Megaphone, color: 'text-rose-600', bg: 'bg-rose-50' },
-    { key: 'helpdesk', label: 'Help Desk', icon: CircleHelp, color: 'text-sky-600', bg: 'bg-sky-50' },
-  ];
-
-  // Attendance helpers
-  const att = dashboardData?.todayAttendance;
   const attStatus = att?.status || null;
   const canCheckIn = !attStatus || attStatus === 'absent' || attStatus === 'holiday' || attStatus === 'leave';
 
@@ -178,7 +177,7 @@ export default function DashboardHome({
     attStatus === 'late' ? 'bg-amber-100 text-amber-700 border-amber-200' :
     attStatus === 'present' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
     'bg-gray-100 text-gray-600 border-gray-200';
-  // Location name from reverse geocoding
+  // Location flags
   const hasLocation = att?.latitude != null && att?.longitude != null;
   const checkInTime = formatAttTime(att?.check_in);
   const checkOutTime = formatAttTime(att?.check_out);

@@ -80,8 +80,8 @@ function getInitials(name: string): string {
 }
 
 function maskMobile(mobile: string): string {
-  if (!mobile || mobile.length < 5) return mobile;
-  return `${mobile.slice(0, 2)}XXX XXX${mobile.length > 9 ? 'X' : ''}`;
+  // Show full mobile number — no masking
+  return mobile || '';
 }
 
 function formatDate(dateStr?: string): string {
