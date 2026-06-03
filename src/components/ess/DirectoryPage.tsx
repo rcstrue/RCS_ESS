@@ -106,8 +106,9 @@ export default function DirectoryPage({
 }: DirectoryPageProps) {
   // ── State ──
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchedOnce, setSearchedOnce] = useState(false); // track if user has searched
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -148,10 +149,11 @@ export default function DirectoryPage({
     }
   }, [scope, employeeId]);
 
-  // ── Load employees ──
+  // ── Load employees (only after user applies a filter or search) ──
   const loadEmployees = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setSearchedOnce(true);
     try {
       const { data: res, error: fetchError } = await fetchEmployees({
         scope,
@@ -182,11 +184,16 @@ export default function DirectoryPage({
     loadFilters();
   }, [loadFilters]);
 
+  // Only load employees when user actually searches or filters (not on mount)
+  const hasSearchOrFilter = searchQuery || (selectedClient && selectedClient !== 'all_clients') || (selectedUnit && selectedUnit !== 'all_units');
+  const filterKey = `${searchQuery}|${selectedClient}|${selectedUnit}|${page}`;
   useEffect(() => {
-    loadEmployees();
-  }, [loadEmployees]);
+    if (hasSearchOrFilter) {
+      loadEmployees();
+    }
+  }, [filterKey]);
 
-  // Reset page when filters change
+  // Reset page when search/filter changes
   useEffect(() => {
     setPage(1);
   }, [searchQuery, selectedClient, selectedUnit]);
@@ -205,7 +212,7 @@ export default function DirectoryPage({
     setSelectedUnit('');
   };
 
-  const hasActiveFilters = searchQuery || selectedClient || selectedUnit;
+  const hasActiveFilters = searchQuery || (selectedClient && selectedClient !== 'all_clients') || (selectedUnit && selectedUnit !== 'all_units');
 
   // ── Open profile dialog with full details ──
   const openProfile = async (emp: Employee) => {
@@ -234,7 +241,9 @@ export default function DirectoryPage({
       <div>
         <h2 className="text-xl font-bold tracking-tight">Directory</h2>
         <p className="text-sm text-muted-foreground">
-          {total > 0 ? `${total} employee${total > 1 ? 's' : ''} found` : 'Search the employee directory'}
+          {searchedOnce && total > 0 ? `${total} employee${total > 1 ? 's' : ''} found` :
+           searchedOnce && total === 0 ? 'No employees found' :
+           'Search employees by name, client, or unit'}
         </p>
       </div>
 
@@ -352,22 +361,29 @@ export default function DirectoryPage({
             Retry
           </Button>
         </div>
+      ) : !searchedOnce ? (
+        /* ── Prompt to search before showing results ── */
+        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed p-10 text-center">
+          <Search className="h-10 w-10 text-muted-foreground/50" />
+          <div>
+            <p className="font-medium text-muted-foreground">Search Employees</p>
+            <p className="text-sm text-muted-foreground/70">
+              Enter a name or employee code, or select a client/unit to find employees
+            </p>
+          </div>
+        </div>
       ) : employees.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed p-10 text-center">
           <Inbox className="h-10 w-10 text-muted-foreground/50" />
           <div>
             <p className="font-medium text-muted-foreground">No employees found</p>
             <p className="text-sm text-muted-foreground/70">
-              {hasActiveFilters
-                ? 'Try adjusting your search or filters'
-                : 'No employees available in your directory'}
+              Try adjusting your search or filters
             </p>
           </div>
-          {hasActiveFilters && (
-            <Button variant="outline" size="sm" className="mt-1" onClick={clearFilters}>
-              Clear Filters
-            </Button>
-          )}
+          <Button variant="outline" size="sm" className="mt-1" onClick={clearFilters}>
+            Clear Filters
+          </Button>
         </div>
       ) : (
         <>
