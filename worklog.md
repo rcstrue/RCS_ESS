@@ -415,3 +415,29 @@ Stage Summary:
 - PWA install will now work on Chrome Android (beforeinstallprompt fires correctly)
 - father_name auto-fills in registration form when existing employee data has it
 - All pending work items completed
+
+---
+Task ID: 14
+Agent: Main Agent
+Task: Fix duplicate check-in location display + show location name instead of lat/lng coordinates
+
+Work Log:
+- Identified duplicate location in DashboardHome.tsx:
+  - Lines 266-276: "Check-in Location" section showing raw lat/lng (e.g. "21.1500, 72.7787")
+  - Lines 279-292: "Check-in Time" section showing time + same lat/lng again (redundant, time already in grid)
+- Removed the "Check-in Time" section entirely (time already displayed in Check In/Check Out/Hours grid)
+- Added reverse geocoding to helpers.ts:
+  - `reverseGeocode(lat, lng)` function using Nominatim (OpenStreetMap) free API
+  - In-memory cache with 24h TTL to avoid repeated API calls
+  - Prefers short place names: suburb/neighborhood + city + state
+  - `getLocationName(lat, lng)` convenience wrapper returning null when no coordinates
+- Updated DashboardHome.tsx:
+  - Added `locationName` state + useEffect to fetch location name when lat/lng changes
+  - "Check-in Location" now shows resolved place name (e.g. "Surat, Gujarat") or "Locating..." while loading
+  - Replaced `attLocation` (raw coordinates string) with `hasLocation` (boolean for showing the section)
+
+Stage Summary:
+- 2 files modified: helpers.ts (added reverse geocoding), DashboardHome.tsx (removed duplicate, added place name)
+- Location shows once instead of twice
+- Shows human-readable place name instead of raw lat/lng coordinates
+- Nominatim API is free, no API key needed, 1 request per user per day (cached)

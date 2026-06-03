@@ -107,3 +107,45 @@ export function parseIST(datetimeString: string): Date {
     new Date(datetimeString).toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
   );
 }
+
+// ── Reverse Geocoding ────────────────────────────────────
+// Simple in-memory cache: "lat,lng" → place name
+const geoCache = new Map<string, { name: string; fetchedAt: number }>();
+const GEO_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+export function reverseGeocode(lat: number, lng: number): Promise<string> {
+  const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+  const cached = geoCache.get(key);
+  if (cached && Date.now() - cached.fetchedAt < GEO_CACHE_TTL) {
+    return Promise.resolve(cached.name);
+  }
+
+  return fetch(
+    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16&addressdetails=1`,
+    {
+      headers: { 'Accept-Language': 'en' },
+    }
+  )
+    .then((r) => r.json())
+    .then((data) => {
+      if (data && data.display_name) {
+        // Prefer a shorter name: area/suburb or city
+        const a = data.address || {};
+        const parts: string[] = [];
+        if (a.suburb || a.neighbourhood || a.village) parts.push(a.suburb || a.neighbourhood || a.village);
+        if (a.city || a.town || a.county) parts.push(a.city || a.town || a.county);
+        if (a.state) parts.push(a.state);
+        const name = parts.length > 0 ? parts.join(', ') : data.display_name.split(',').slice(0, 3).join(',').trim();
+        geoCache.set(key, { name, fetchedAt: Date.now() });
+        return name;
+      }
+      return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    })
+    .catch(() => `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+}
+
+/** Convenience: resolve location from AttendanceRecord lat/lng */
+export function getLocationName(lat?: number | null, lng?: number | null): Promise<string | null> {
+  if (lat == null || lng == null) return Promise.resolve(null);
+  return reverseGeocode(lat, lng);
+}

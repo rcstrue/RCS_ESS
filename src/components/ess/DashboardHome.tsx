@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { canApprove, parseIST } from './helpers';
+import { canApprove, parseIST, getLocationName } from './helpers';
 import type { Employee, EmployeeRole, LeaveBalance, AttendanceRecord } from '@/lib/ess-types';
 
 import { Card, CardContent } from '@/components/ui/card';
@@ -71,6 +71,20 @@ export default function DashboardHome({
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Reverse geocode location name
+  const [locationName, setLocationName] = useState<string | null>(null);
+  useEffect(() => {
+    if (att?.latitude != null && att?.longitude != null) {
+      let cancelled = false;
+      getLocationName(att.latitude, att.longitude).then((name) => {
+        if (!cancelled && name) setLocationName(name);
+      });
+      return () => { cancelled = true; };
+    } else {
+      setLocationName(null);
+    }
+  }, [att?.latitude, att?.longitude]);
 
   const hasApprovals = canApprove(role) && dashboardData
     && (dashboardData.pendingLeaves + dashboardData.pendingExpenses) > 0;
@@ -164,10 +178,8 @@ export default function DashboardHome({
     attStatus === 'late' ? 'bg-amber-100 text-amber-700 border-amber-200' :
     attStatus === 'present' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
     'bg-gray-100 text-gray-600 border-gray-200';
-  // Location from lat/lng
-  const attLocation = att?.latitude && att?.longitude
-    ? `${att.latitude.toFixed(4)}, ${att.longitude.toFixed(4)}`
-    : null;
+  // Location name from reverse geocoding
+  const hasLocation = att?.latitude != null && att?.longitude != null;
   const checkInTime = formatAttTime(att?.check_in);
   const checkOutTime = formatAttTime(att?.check_out);
   const hoursWorked = calcHours(att?.check_in, att?.check_out);
@@ -263,30 +275,14 @@ export default function DashboardHome({
               </div>
 
               {/* Location */}
-              {attLocation && (
+              {hasLocation && (
                 <div className="flex items-center gap-2 px-1 py-1">
                   <div className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 shrink-0">
                     <MapPin className="w-3 h-3 text-emerald-600" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[10px] text-gray-400">Check-in Location</p>
-                    <p className="text-xs font-medium text-gray-700 truncate">{attLocation}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Check-in time with location */}
-              {att?.check_in && (
-                <div className="flex items-center gap-2 px-1">
-                  <div className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 shrink-0">
-                    <LogIn className="w-3 h-3 text-emerald-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] text-gray-400">Check-in Time</p>
-                    <p className="text-xs font-medium text-gray-700">
-                      {checkInTime || '—'}
-                      {attLocation && <span className="text-gray-400 ml-1">• {attLocation}</span>}
-                    </p>
+                    <p className="text-xs font-medium text-gray-700 truncate">{locationName || 'Locating…'}</p>
                   </div>
                 </div>
               )}
