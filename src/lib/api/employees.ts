@@ -1,6 +1,18 @@
 // Employee API service for MySQL backend
 import { apiRequest } from './config';
 
+// PHP backend wraps responses as { success: true, data: <payload>, error? }
+// This helper unwraps the envelope so callers get the payload directly.
+function unwrap<T>(result: { data: T | null; error: string | null }): { data: T | null; error: string | null } {
+  if (result.error) return result;
+  // If data looks like a PHP envelope (has .success and .data), unwrap it
+  const d = result.data as Record<string, unknown> | null;
+  if (d && typeof d === 'object' && 'success' in d && 'data' in d) {
+    return { data: (d as { success: boolean; data: T }).data, error: null };
+  }
+  return result;
+}
+
 export interface Employee {
   id: number;
   employee_code: number | null;
@@ -62,67 +74,67 @@ export async function getEmployees(page: number = 1, limit: number = 100, search
   const params = new URLSearchParams({ page: String(page), limit: String(limit) });
   if (search) params.set('search', search);
   if (status) params.set('status', status);
-  return apiRequest<{ data: Employee[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>(`/employees?${params}`);
+  return unwrap(apiRequest<{ data: Employee[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>(`/employees?${params}`));
 }
 
 // Get employee by ID
 export async function getEmployeeById(id: number | string) {
-  return apiRequest<Employee>(`/employees/${id}`);
+  return unwrap(apiRequest<Employee>(`/employees/${id}`));
 }
 
 // Get employee by mobile number
 export async function getEmployeeByMobile(mobileNumber: string) {
-  return apiRequest<Employee>(`/employees/mobile/${mobileNumber}`);
+  return unwrap(apiRequest<Employee>(`/employees/mobile/${mobileNumber}`));
 }
 
 // Check if mobile exists
 export async function checkMobileExists(mobileNumber: string) {
-  return apiRequest<{ exists: boolean }>(`/employees/check-mobile/${mobileNumber}`);
+  return unwrap(apiRequest<{ exists: boolean }>(`/employees/check-mobile/${mobileNumber}`));
 }
 
 // Create new employee
 export async function createEmployee(data: Partial<Employee>) {
-  return apiRequest<Employee>('/employees', {
+  return unwrap(apiRequest<Employee>('/employees', {
     method: 'POST',
     body: JSON.stringify(data),
-  });
+  }));
 }
 
 // Update employee
 export async function updateEmployee(id: number | string, data: Partial<Employee>) {
-  return apiRequest<Employee>(`/employees/${id}`, {
+  return unwrap(apiRequest<Employee>(`/employees/${id}`, {
     method: 'PUT',
     body: JSON.stringify(data),
-  });
+  }));
 }
 
 // Login employee (mobile + DOB verification)
 export async function loginEmployee(mobileNumber: string, dateOfBirth: string) {
-  return apiRequest<{ success: boolean; employee?: Employee; error?: string }>('/employees/login', {
+  return unwrap(apiRequest<{ success: boolean; employee?: Employee; error?: string }>('/employees/login', {
     method: 'POST',
     body: JSON.stringify({ mobileNumber, dateOfBirth }),
-  });
+  }));
 }
 
 // Approve employee
 export async function approveEmployee(id: number, approvedBy: string) {
-  return apiRequest<Employee>(`/employees/${id}/approve`, {
+  return unwrap(apiRequest<Employee>(`/employees/${id}/approve`, {
     method: 'POST',
     body: JSON.stringify({ approvedBy }),
-  });
+  }));
 }
 
 // Reject employee
 export async function rejectEmployee(id: number) {
-  return apiRequest<Employee>(`/employees/${id}/reject`, {
+  return unwrap(apiRequest<Employee>(`/employees/${id}/reject`, {
     method: 'POST',
-  });
+  }));
 }
 
 // Update employee role
 export async function updateEmployeeRole(id: number, role: 'admin' | 'manager' | 'employee') {
-  return apiRequest<Employee>(`/employees/${id}/role`, {
+  return unwrap(apiRequest<Employee>(`/employees/${id}/role`, {
     method: 'PUT',
     body: JSON.stringify({ role }),
-  });
+  }));
 }
