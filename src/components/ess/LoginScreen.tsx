@@ -180,12 +180,15 @@ export default function LoginScreen({ onLogin, onBackToRegistration, onForcePinC
         storeEssToken(data.token);
       }
 
-      const role = detectRole(data.employee);
+      // Use backend-computed role directly (backend checks employee_role, worker_category, app_role)
+      // Frontend detectRole() doesn't work because backend doesn't send those fields
+      const role = (data.role || detectRole(data.employee)) as EmployeeRole;
       const session: ESSSession = {
         employee: data.employee,
         role,
         token: data.token,
         token_expires_at: data.token_expires_at,
+        has_custom_pin: data.has_custom_pin,
       };
 
       // Force PIN change on first login

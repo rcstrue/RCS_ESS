@@ -51,7 +51,8 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
         const parsed = JSON.parse(stored) as ESSSession;
         if (parsed?.employee?.id) {
           // If user hasn't completed PIN change, show full-screen force PIN change
-          if (!parsed.has_custom_pin) {
+          // Only trigger when has_custom_pin is explicitly false (not undefined from old sessions)
+          if (parsed.has_custom_pin === false) {
             setForcePinSession(parsed);
             if (parsed.token) {
               localStorage.setItem('ess_token', parsed.token);

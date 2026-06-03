@@ -73,8 +73,9 @@ export interface LoginResponse {
 export interface ESSSession {
   employee: Employee;
   role: EmployeeRole;
- token?: string;                // JWT stored in session for apiRequest
+  token?: string;                // JWT stored in session for apiRequest
   token_expires_at?: string;
+  has_custom_pin?: boolean;      // true = user has set their own PIN
 }
 
 // ===== Attendance =====
