@@ -309,3 +309,49 @@ Stage Summary:
 - Employee directory supports role filtering (all/managers/admin)
 - has_custom_pin removed from all employees table references (column doesn't exist)
 - Zero ESLint errors from ESS files
+
+---
+Task ID: 11
+Agent: Main Agent
+Task: v2.0.0 — Remove PIN popup, fix father_name autofill, PWA install, GPS check-in, role-based access, admin Role Access tab
+
+Work Log:
+- Removed FirstLoginPinPopup from ESSApp startup flow — only full-screen ForceChangePin remains for !has_custom_pin
+- Removed isFirstLogin, showFirstLoginPopup states from ESSApp.tsx
+- Fixed father_name not auto-filled in Complete Registration form:
+  - Added father_name to existingEmployee interface in RegistrationWizard.tsx
+  - Changed hardcoded fatherHusbandName: '' to emp?.father_name || '' in createInitialData
+- Fixed PWA Install banner:
+  - Banner now shows on ALL platforms (not just Chrome with beforeinstallprompt)
+  - Install button visible for both iOS ("How to Install") and Android ("Install")
+  - Added resetDismiss() to usePwaInstall hook to re-show banner from More menu
+  - More menu "Install App" now resets dismissed state before prompting
+- Enhanced GPS check-in display:
+  - DashboardHome now shows check-in location and time together
+  - Location label changed from "Location" to "Check-in Location"
+  - Added "Check-in Time" row showing time + location
+- Fixed Employees page for managers:
+  - Expanded EmployeeRole type: added 'field_officer' | 'admin'
+  - Updated detectRole() to return admin, field_officer as distinct roles
+  - Created shared canViewDirectory() function in helpers.ts
+  - canViewDirectory now allows: manager, regional_manager, field_officer, admin
+  - BottomNav and ESSApp both use shared canViewDirectory
+- Updated getScope() for new roles: admin=all, field_officer=city
+- Updated getRoleBadge() with admin (red), field_officer (orange) badge colors
+- Added Admin "Role Access" tab:
+  - Created RoleAccessManagement.tsx component with 6 roles, 4 permissions
+  - Created /api/role-access GET/PUT endpoints with Prisma
+  - Added RoleAccess model to prisma schema
+  - AdminDashboard now has "Role Access" tab (admin-only)
+- Updated version: 2.0.0 in package.json and manifest.json
+
+Stage Summary:
+- 17 files modified, 786 insertions, 95 deletions
+- PIN popup removed from startup entirely
+- Father name now auto-fills in Complete Registration form
+- PWA install banner visible on all platforms with reset capability
+- GPS check-in shows location alongside time
+- Managers, field officers, regional managers, and admins can see Employees page
+- Admin dashboard has new Role Access tab for visibility configuration
+- Version bumped to 2.0.0
+- Pushed as commit 49f2c7e to GitHub
