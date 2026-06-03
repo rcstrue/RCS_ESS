@@ -80,7 +80,7 @@ export async function fetchAttendance(employee_id: number, month?: string) {
   return unwrap<PaginatedResponse<AttendanceRecord>>(apiRequest<PaginatedResponse<AttendanceRecord>>(`/ess/attendance?${params}`));
 }
 
-export async function checkIn(data: { employee_id: number; location?: string }) {
+export async function checkIn(data: { employee_id: number; latitude?: number; longitude?: number; location?: string }) {
   return unwrap<AttendanceRecord>(apiRequest<AttendanceRecord>('/ess/attendance', {
     method: 'POST',
     body: JSON.stringify(data),

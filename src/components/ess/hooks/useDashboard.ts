@@ -89,15 +89,22 @@ export function useDashboard(session: ESSSession | null) {
     if (!session || checkInLoading) return;
     setCheckInLoading(true);
     try {
-      const location = await new Promise<string>((resolve) => {
-        if (!navigator.geolocation) { resolve('Location unavailable'); return; }
-        navigator.geolocation.getCurrentPosition(
-          (pos) => resolve(`${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`),
-          () => resolve('Location denied'),
-          { enableHighAccuracy: true, timeout: 10000 },
-        );
-      });
-      const { data, error } = await checkIn({ employee_id: session.employee.id, location });
+      let latitude: number | undefined;
+      let longitude: number | undefined;
+      if (navigator.geolocation) {
+        const pos = await new Promise<GeolocationPosition | null>((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (p) => resolve(p),
+            () => resolve(null),
+            { enableHighAccuracy: true, timeout: 10000 },
+          );
+        });
+        if (pos) {
+          latitude = pos.coords.latitude;
+          longitude = pos.coords.longitude;
+        }
+      }
+      const { data, error } = await checkIn({ employee_id: session.employee.id, latitude, longitude });
       if (error) { toast.error(error); }
       else if (data) { toast.success('Checked in successfully!'); loadDashboardData(); }
     } catch { toast.error('Check-in failed. Please try again.'); }

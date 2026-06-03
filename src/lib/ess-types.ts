@@ -86,7 +86,9 @@ export interface AttendanceRecord {
   status: 'present' | 'checked_in' | 'checked_out' | 'late' | 'absent' | 'leave' | 'holiday' | 'half_day';
   check_in?: string;
   check_out?: string;
-  location?: string;
+  latitude?: number;
+  longitude?: number;
+  note?: string;
 }
 
 export interface AttendanceSummary {
