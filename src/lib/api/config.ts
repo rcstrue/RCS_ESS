@@ -60,7 +60,6 @@ export async function apiRequest<T>(
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-API-KEY': API_KEY,
-      ...(options.headers as Record<string, string>),
     };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
@@ -75,6 +74,9 @@ export async function apiRequest<T>(
         }
       } catch { /* ignore */ }
     }
+
+    // Custom headers override auto-resolved values (e.g., admin token vs ess token)
+    Object.assign(headers, options.headers as Record<string, string>);
 
     const response = await fetch(`${API_BASE_URL}/api${endpoint}`, {
       ...options,

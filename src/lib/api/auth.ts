@@ -15,6 +15,10 @@ export interface AuthSession {
 
 // Admin login
 export async function adminLogin(email: string, password: string) {
+  // Clear ESS tokens to prevent token confusion between admin and ESS sessions
+  localStorage.removeItem('ess_token');
+  localStorage.removeItem('ess_employee');
+
   const result = await apiRequest<AuthSession>('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
@@ -70,7 +74,16 @@ export function getAdminRole(): 'admin' | 'manager' | null {
   return session?.user.role || null;
 }
 
-// Verify session with server
+// Verify session with server - explicitly uses admin token (not ESS token)
 export async function verifySession() {
-  return apiRequest<{ valid: boolean; user?: AdminUser }>('/auth/verify');
+  const session = getAdminSession();
+  if (!session) {
+    return { data: null, error: 'No admin session found' };
+  }
+
+  return apiRequest<{ valid: boolean; user?: AdminUser }>('/auth/verify', {
+    headers: {
+      'Authorization': `Bearer ${session.token}`,
+    },
+  });
 }
