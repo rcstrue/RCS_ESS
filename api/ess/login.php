@@ -234,13 +234,16 @@ function _determineRole($employee): string
     if ($appRole === 'regional_manager') return 'regional_manager';
     if (strpos($employeeRole, 'regional') !== false) return 'regional_manager';
     if (strpos($workerCategory, 'regional') !== false) return 'regional_manager';
+    if (strpos($designation, 'regional manager') !== false) return 'regional_manager';
 
     // Manager / Field Officer / Area Manager
     if ($appRole === 'manager') return 'manager';
+    if ($appRole === 'field_officer') return 'manager';
     if (in_array($employeeRole, array('admin', 'manager'))) return 'manager';
     if (strpos($workerCategory, 'manager') !== false) return 'manager';
     if (strpos($workerCategory, 'field officer') !== false) return 'manager';
     if (strpos($workerCategory, 'area manager') !== false) return 'manager';
+    if (strpos($designation, 'manager') !== false) return 'manager';
     if (strpos($designation, 'field officer') !== false) return 'manager';
     if (strpos($designation, 'area manager') !== false) return 'manager';
 
@@ -248,6 +251,8 @@ function _determineRole($employee): string
     if (strpos($workerCategory, 'supervisor') !== false) return 'supervisor';
     if (strpos($workerCategory, 'team lead') !== false) return 'supervisor';
     if (strpos($employeeRole, 'supervisor') !== false) return 'supervisor';
+    if (strpos($designation, 'supervisor') !== false) return 'supervisor';
+    if (strpos($designation, 'team lead') !== false) return 'supervisor';
 
     return 'employee';
 }

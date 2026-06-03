@@ -14,16 +14,16 @@ export function detectRole(employee: Employee): EmployeeRole {
   if (role === 'admin') return 'admin';
 
   // Regional Manager
-  if (category.includes('regional') || role.includes('regional')) return 'regional_manager';
+  if (category.includes('regional') || role.includes('regional') || designation.includes('regional manager')) return 'regional_manager';
 
   // Field Officer (specific role before manager check)
   if (category.includes('field officer') || designation.includes('field officer')) return 'field_officer';
 
   // Manager / Area Manager
-  if (role === 'manager' || category.includes('manager') || category.includes('area manager') || designation.includes('area manager')) return 'manager';
+  if (role === 'manager' || category.includes('manager') || designation.includes('manager') || category.includes('area manager') || designation.includes('area manager')) return 'manager';
 
   // Supervisor / Team Lead
-  if (category.includes('supervisor') || category.includes('team lead') || role.includes('supervisor')) return 'supervisor';
+  if (category.includes('supervisor') || category.includes('team lead') || role.includes('supervisor') || designation.includes('supervisor') || designation.includes('team lead')) return 'supervisor';
 
   return 'employee';
 }
