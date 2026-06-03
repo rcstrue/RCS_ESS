@@ -441,3 +441,43 @@ Stage Summary:
 - Location shows once instead of twice
 - Shows human-readable place name instead of raw lat/lng coordinates
 - Nominatim API is free, no API key needed, 1 request per user per day (cached)
+
+---
+Task ID: 15
+Agent: Main Agent
+Task: Salary Upload feature with XLSX template download, carry-forward calculation, and bulk upload
+
+Work Log:
+- Installed `xlsx` package (v0.18.5) for Excel file generation and parsing
+- Created `src/components/admin/SalaryUpload.tsx` (775 lines):
+  - Template download: generates styled XLSX with bold headers (light green bg), frozen top row, sample data
+  - Columns: Employee ID, Employee Name, Amount, Month, Year, Date, Remarks, Carry Forward (Auto-calculated)
+  - Drag-and-drop upload zone with file type validation (.xlsx only)
+  - XLSX parsing with case-insensitive column mapping
+  - Carry-forward auto-calculation: cumulative sum per Employee ID across rows
+  - Row-level validation: Employee ID required, Amount > 0, Month 1-12, Year 4-digit, Date required
+  - Preview table with alternating row colors, sticky header, max-height scroll
+  - Carry-forward column highlighted in emerald
+  - Summary stats: total rows, total amount (INR), valid rows, error rows
+  - Error rows highlighted in red with detail list
+  - Submit to backend via apiRequest
+  - Clear/reset functionality
+- Created `api/ess/salary-upload.php` (235 lines):
+  - POST: bulk insert salary records with transaction safety
+  - GET: view uploaded records with filters (month, year, employee_id, status)
+  - Auto-creates `salary_upload_records` table on first use
+  - Validates each row: employee ID, amount, month, year
+  - Checks employee exists in database
+  - Logs upload to `bulk_upload_logs` table
+  - Summary totals in GET response
+- Updated `AdminDashboard.tsx`: added Salary Upload tab with FileSpreadsheet icon
+- Build verified: 1804 modules, 793KB JS, 99KB CSS
+- Pushed as commit 5f04b64 to GitHub
+
+Stage Summary:
+- 4 files created/modified: SalaryUpload.tsx (new), salary-upload.php (new), AdminDashboard.tsx (modified), package.json (xlsx dep)
+- XLSX template downloads as proper .xlsx file (not CSV) with styled headers and sample data
+- Carry-forward calculated automatically per employee across upload rows
+- Backend stores records with transaction safety and upload logging
+- Zero lint errors in new files
+- Deploy command needed on server: cd ~/RCS_ESS && git pull origin main && bun install && bun run build && rsync -av dist/ ~/domains/join.rcsfacility.com/public_html/ && rsync -av --exclude='config.php' api/ess/ ~/domains/join.rcsfacility.com/public_html/api/ess/
