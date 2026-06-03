@@ -7,7 +7,7 @@ import {
   fetchExpenses, fetchTasks, checkIn, checkOut, fetchAttendance,
 } from '@/lib/ess-api';
 import type { ESSSession, LeaveBalance, AttendanceRecord } from '@/lib/ess-types';
-import { todayDateString, getISTMonthKey } from '../helpers';
+import { todayDateString, getISTMonthKey, getHighAccuracyPosition } from '../helpers';
 import type { DashboardData } from '../DashboardHome';
 
 // ══════════════════════════════════════════════════════════════
@@ -91,18 +91,14 @@ export function useDashboard(session: ESSSession | null) {
     try {
       let latitude: number | undefined;
       let longitude: number | undefined;
-      if (navigator.geolocation) {
-        const pos = await new Promise<GeolocationPosition | null>((resolve) => {
-          navigator.geolocation.getCurrentPosition(
-            (p) => resolve(p),
-            () => resolve(null),
-            { enableHighAccuracy: true, timeout: 10000 },
-          );
-        });
-        if (pos) {
-          latitude = pos.coords.latitude;
-          longitude = pos.coords.longitude;
-        }
+      const gps = await getHighAccuracyPosition({
+        watchMs: 8000,      // watch up to 8 seconds for GPS convergence
+        maxAccuracy: 50,    // reject readings worse than 50m
+        fastAccuracy: 20,   // accept immediately if ≤20m accuracy
+      });
+      if (gps) {
+        latitude = gps.latitude;
+        longitude = gps.longitude;
       }
       const { data, error } = await checkIn({ employee_id: session.employee.id, latitude, longitude });
       if (error) { toast.error(error); }

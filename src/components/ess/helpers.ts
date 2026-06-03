@@ -149,3 +149,125 @@ export function getLocationName(lat?: number | null, lng?: number | null): Promi
   if (lat == null || lng == null) return Promise.resolve(null);
   return reverseGeocode(lat, lng);
 }
+
+// ── High-Accuracy GPS ──────────────────────────────────
+// Uses watchPosition to collect multiple readings over a few seconds,
+// then picks the most accurate one. A single getCurrentPosition call
+// often returns a cell-tower-based fix (100m+). By watching for
+// GPS satellite convergence, we routinely achieve ≤20m accuracy.
+
+interface HighAccuracyCoords {
+  latitude: number;
+  longitude: number;
+  accuracy: number; // meters
+}
+
+/**
+ * Get the most accurate GPS position within a time budget.
+ *
+ * Strategy:
+ * 1. Start watchPosition (enableHighAccuracy + maximumAge: 0)
+ * 2. Collect readings for up to `watchMs` milliseconds
+ * 3. Reject readings with accuracy > `maxAccuracy` meters
+ * 4. If a reading ≤20m is found, stop immediately (fast path)
+ * 5. Otherwise return the most accurate reading collected
+ * 6. Fallback: if GPS fails entirely, use getCurrentPosition as backup
+ */
+export function getHighAccuracyPosition(options?: {
+  watchMs?: number;       // how long to watch (default 8000ms = 8s)
+  maxAccuracy?: number;   // reject readings worse than this (default 50m)
+  fastAccuracy?: number;  // accept immediately if within this (default 20m)
+}): Promise<HighAccuracyCoords | null> {
+  const {
+    watchMs = 8000,
+    maxAccuracy = 50,
+    fastAccuracy = 20,
+  } = options || {};
+
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve(null);
+      return;
+    }
+
+    const readings: HighAccuracyCoords[] = [];
+    let watchId: number | null = null;
+    let settled = false;
+
+    const finish = (coords: HighAccuracyCoords | null) => {
+      if (settled) return;
+      settled = true;
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+      resolve(coords);
+    };
+
+    // Start watching — force fresh GPS, no cache
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        if (latitude == null || longitude == null) return;
+
+        const reading: HighAccuracyCoords = { latitude, longitude, accuracy: accuracy ?? 999 };
+
+        // Skip wildly inaccurate readings (cell tower only)
+        if (reading.accuracy > maxAccuracy) return;
+
+        readings.push(reading);
+
+        // Fast path: if we already have ≤20m accuracy, stop immediately
+        if (reading.accuracy <= fastAccuracy) {
+          finish(reading);
+          return;
+        }
+      },
+      () => {
+        // GPS error — stop watching, will use fallback below
+        if (watchId !== null) {
+          navigator.geolocation.clearWatch(watchId);
+          watchId = null;
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,         // never use cached position
+        timeout: 15000,        // per-reading timeout
+      },
+    );
+
+    // After the watch window, pick the best reading
+    setTimeout(() => {
+      if (settled) return;
+
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+
+      if (readings.length > 0) {
+        // Sort by accuracy (lower = better) and pick the best
+        readings.sort((a, b) => a.accuracy - b.accuracy);
+        finish(readings[0]);
+      } else {
+        // No good readings collected — fallback to single getCurrentPosition
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (pos.coords.latitude != null && pos.coords.longitude != null) {
+              finish({
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude,
+                accuracy: pos.coords.accuracy ?? 999,
+              });
+            } else {
+              finish(null);
+            }
+          },
+          () => finish(null),
+          { enableHighAccuracy: true, timeout: 10000 },
+        );
+      }
+    }, watchMs);
+  });
+}
