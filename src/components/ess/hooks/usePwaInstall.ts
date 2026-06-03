@@ -44,7 +44,7 @@ export function usePwaInstall() {
 
   const [permissionsRequested, setPermissionsRequested] = useState(() => {
     try {
-      return sessionStorage.getItem(PERMISSIONS_REQUESTED_KEY) === 'true';
+      return localStorage.getItem(PERMISSIONS_REQUESTED_KEY) === 'true';
     } catch { return false; }
   });
 
@@ -170,8 +170,8 @@ export function usePwaInstall() {
       }
     } catch { results.camera = false; }
 
-    // Mark as requested so we don't ask again this session
-    try { sessionStorage.setItem(PERMISSIONS_REQUESTED_KEY, 'true'); } catch { /* ignore */ }
+    // Mark as requested so we don't ask again (persisted across sessions)
+    try { localStorage.setItem(PERMISSIONS_REQUESTED_KEY, 'true'); } catch { /* ignore */ }
     setPermissionsRequested(true);
 
     await checkPermissions();
@@ -179,7 +179,10 @@ export function usePwaInstall() {
   }, [checkPermissions]);
 
   // ── Show permission dialog? ──
-  const shouldShowPermissions = state.isInstalled && !permissionsRequested;
+  // Only show if installed AND not already asked AND at least one permission is not yet granted
+  const needsAnyPermission =
+    state.permissions.camera !== 'granted' || state.permissions.geolocation !== 'granted';
+  const shouldShowPermissions = state.isInstalled && !permissionsRequested && needsAnyPermission;
 
   // ── Show install banner?
   // Always show unless dismissed or already installed in standalone mode
