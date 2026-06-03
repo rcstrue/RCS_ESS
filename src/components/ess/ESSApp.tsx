@@ -26,7 +26,7 @@ import { useDashboard } from './hooks/useDashboard';
 import { usePwaInstall } from './hooks/usePwaInstall';
 
 // Helpers
-import { getGreeting, getInitials, getScope, canApprove, canViewDirectory } from './helpers';
+import { getGreeting, getInitials, getScope, canApprove, canViewDirectory, detectRole } from './helpers';
 
 // shadcn/ui
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -50,6 +50,11 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
       if (stored) {
         const parsed = JSON.parse(stored) as ESSSession;
         if (parsed?.employee?.id) {
+          // Re-derive role for old sessions that didn't store it
+          if (!parsed.role) {
+            parsed.role = detectRole(parsed.employee);
+            localStorage.setItem('ess_employee', JSON.stringify(parsed));
+          }
           // If user hasn't completed PIN change, show full-screen force PIN change
           // Only trigger when has_custom_pin is explicitly false (not undefined from old sessions)
           if (parsed.has_custom_pin === false) {
