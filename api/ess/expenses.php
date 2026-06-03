@@ -158,19 +158,22 @@ function handleGetExpenses(): void
         $totalAmount = 0;
     }
 
-    // Monthly summary
+    // Monthly summary — RUNNING BALANCE (bank-statement style carry-forward)
+    // Opening balance = cumulative advance allocations from ALL previous months
+    //                   - cumulative approved expenses from ALL previous months
+    // Closing balance = Opening balance + This month advance - This month expenses
     $monthSummary = array(
         'advance_received' => 0, 'this_month_advance' => 0,
-        'prev_month_balance' => 0, 'approved_expenses' => 0, 'balance' => 0
+        'opening_balance'  => 0, 'approved_expenses' => 0,
+        'closing_balance'  => 0
     );
     $currentMonth = !empty($monthFilter) ? $monthFilter : date('Y-m');
     if (preg_match('/^(\d{4})-(\d{2})$/', $currentMonth, $m)) {
-        $filterYear = (int)$m[1];
+        $filterYear  = (int)$m[1];
         $filterMonth = (int)$m[2];
-        $monthLike = $currentMonth . '%';
+        $monthLike   = $currentMonth . '%';
 
-        // Allocated advance from manager_advance_allocations table
-        // Employee IS the manager — use their employee_id directly as manager_id
+        // ── 1. This month's allocated advance ──────────────────────────────
         try {
             $allocStmt = $conn->prepare('SELECT COALESCE(SUM(amount),0) AS t FROM manager_advance_allocations WHERE manager_id = ? AND month = ? AND year = ?');
             if ($allocStmt) {
@@ -184,41 +187,53 @@ function handleGetExpenses(): void
             error_log('alloc_advance error: ' . $e->getMessage());
         }
 
-        // Previous month balance (carry forward)
-        $prevMonth = $filterMonth - 1;
-        $prevYear = $filterYear;
-        if ($prevMonth < 1) { $prevMonth = 12; $prevYear--; }
-        $prevAlloc = 0;
-        $prevUsed = 0;
+        // ── 2. Opening balance = cumulative allocations BEFORE this month
+        //       minus cumulative approved expenses BEFORE this month ──────
+        // This replaces the old single-month-lookback with a full running balance.
+        $cumAlloc = 0;
+        $cumExpenses = 0;
 
         try {
-            $prevAllocStmt = $conn->prepare('SELECT COALESCE(SUM(amount),0) AS t FROM manager_advance_allocations WHERE manager_id = ? AND month = ? AND year = ?');
-            if ($prevAllocStmt) {
-                $prevAllocStmt->bind_param('sii', $queryEmployeeId, $prevMonth, $prevYear);
-                $prevAllocStmt->execute();
-                $prevAllocRow = $prevAllocStmt->get_result()->fetch_assoc();
-                $prevAlloc = (float)($prevAllocRow['t'] ?? 0);
-                $prevAllocStmt->close();
+            // All advance allocations BEFORE the current month
+            $cumAllocStmt = $conn->prepare(
+                'SELECT COALESCE(SUM(amount),0) AS t FROM manager_advance_allocations WHERE manager_id = ? AND (year < ? OR (year = ? AND month < ?))'
+            );
+            if ($cumAllocStmt) {
+                $cumAllocStmt->bind_param('siii', $queryEmployeeId, $filterYear, $filterYear, $filterMonth);
+                $cumAllocStmt->execute();
+                $cumAllocRow = $cumAllocStmt->get_result()->fetch_assoc();
+                $cumAlloc = (float)($cumAllocRow['t'] ?? 0);
+                $cumAllocStmt->close();
             }
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+            error_log('cum_alloc error: ' . $e->getMessage());
+        }
 
         try {
-            $prevMonthLike = sprintf('%04d-%02d', $prevYear, $prevMonth) . '%';
-            $prevExpStmt = $conn->prepare("SELECT COALESCE(SUM(amount),0) AS t FROM ess_expenses WHERE employee_id = ? AND expense_date LIKE ? AND category IN ('expense','employee_advance') AND status IN ('approved','reimbursed')");
-            if ($prevExpStmt) {
-                $prevExpStmt->bind_param('ss', $queryEmployeeId, $prevMonthLike);
-                $prevExpStmt->execute();
-                $prevExpRow = $prevExpStmt->get_result()->fetch_assoc();
-                $prevUsed = (float)($prevExpRow['t'] ?? 0);
-                $prevExpStmt->close();
+            // All approved expenses BEFORE the current month (using date comparison)
+            // First day of current month as the cutoff
+            $firstDayOfCurrentMonth = sprintf('%04d-%02d-01', $filterYear, $filterMonth);
+            $cumExpStmt = $conn->prepare(
+                "SELECT COALESCE(SUM(amount),0) AS t FROM ess_expenses WHERE employee_id = ? AND expense_date < ? AND category IN ('expense','employee_advance') AND status IN ('approved','reimbursed')"
+            );
+            if ($cumExpStmt) {
+                $cumExpStmt->bind_param('ss', $queryEmployeeId, $firstDayOfCurrentMonth);
+                $cumExpStmt->execute();
+                $cumExpRow = $cumExpStmt->get_result()->fetch_assoc();
+                $cumExpenses = (float)($cumExpRow['t'] ?? 0);
+                $cumExpStmt->close();
             }
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+            error_log('cum_expenses error: ' . $e->getMessage());
+        }
 
-        $monthSummary['prev_month_balance'] = $prevAlloc - $prevUsed;
-        // Total advance = previous month carry-forward + this month allocation
-        $monthSummary['advance_received'] = $monthSummary['this_month_advance'] + $monthSummary['prev_month_balance'];
+        // Opening balance = cumulative allocations - cumulative expenses (running balance)
+        $monthSummary['opening_balance'] = $cumAlloc - $cumExpenses;
 
-        // Approved expenses + advances from ess_expenses for current month
+        // Total advance = opening balance + this month allocation
+        $monthSummary['advance_received'] = $monthSummary['this_month_advance'] + $monthSummary['opening_balance'];
+
+        // ── 3. Approved expenses for current month ─────────────────────────
         try {
             $expStmt = $conn->prepare("SELECT COALESCE(SUM(amount),0) AS t FROM ess_expenses WHERE employee_id = ? AND expense_date LIKE ? AND category IN ('expense','employee_advance') AND status IN ('approved','reimbursed')");
             if ($expStmt) {
@@ -232,7 +247,8 @@ function handleGetExpenses(): void
             error_log('approved_expenses error: ' . $e->getMessage());
         }
     }
-    $monthSummary['balance'] = $monthSummary['advance_received'] - $monthSummary['approved_expenses'];
+    // Closing balance = Total advance - Total expenses (like a bank statement)
+    $monthSummary['closing_balance'] = $monthSummary['advance_received'] - $monthSummary['approved_expenses'];
 
     $pag = buildPagination($total, $page, $limit);
     jsonOutput(array(

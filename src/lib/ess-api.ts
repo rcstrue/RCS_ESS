@@ -147,7 +147,15 @@ export async function fetchExpenses(employee_id: number, options?: { status?: st
   const params = new URLSearchParams({ employee_id: String(employee_id) });
   if (options?.status) params.set('status', options.status);
   if (options?.month) params.set('month', options.month);
-  return unwrap<PaginatedResponse<Expense> & { month_summary?: { advance_received: number; approved_expenses: number; balance: number } }>(
+  return unwrap<PaginatedResponse<Expense> & {
+    month_summary?: {
+      advance_received: number;
+      this_month_advance: number;
+      opening_balance: number;
+      approved_expenses: number;
+      closing_balance: number;
+    };
+  }>(
     apiRequest(`/ess/expenses?${params}`)
   );
 }

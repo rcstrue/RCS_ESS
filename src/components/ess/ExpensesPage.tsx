@@ -164,7 +164,13 @@ export function ExpensesPage({
   // My expenses
   const [myExpenses, setMyExpenses] = useState<Expense[]>([]);
   const [isLoadingMy, setIsLoadingMy] = useState(true);
-  const [serverMonthSummary, setServerMonthSummary] = useState<{ advance_received: number; approved_expenses: number; balance: number } | null>(null);
+  const [serverMonthSummary, setServerMonthSummary] = useState<{
+    advance_received: number;
+    this_month_advance: number;
+    opening_balance: number;
+    approved_expenses: number;
+    closing_balance: number;
+  } | null>(null);
 
   // Pending team expenses (for approve tab)
   const [pendingTeamExpenses, setPendingTeamExpenses] = useState<Expense[]>([]);
@@ -222,7 +228,7 @@ export function ExpensesPage({
         setMyExpenses(data?.items ?? []);
         // Use month_summary from server (has advance from manager_advance_allocations)
         if (data && 'month_summary' in data && (data as Record<string, unknown>).month_summary) {
-          setServerMonthSummary((data as Record<string, unknown>).month_summary as { advance_received: number; approved_expenses: number; balance: number });
+          setServerMonthSummary((data as Record<string, unknown>).month_summary as typeof serverMonthSummary);
         } else {
           setServerMonthSummary(null);
         }
@@ -284,17 +290,11 @@ export function ExpensesPage({
     });
   }, [myExpenses, selectedMonth]);
 
-  // ── Previous month label for display ──
-  const prevMonthLabel = useMemo(() => {
-    const prev = navigateMonth(selectedMonth, -1);
-    return formatMonthYear(prev);
-  }, [selectedMonth]);
-
-  // ── Summary for selected month ──
+  // ── Summary for selected month (running balance) ──
   const monthSummary = useMemo(() => {
     const thisMonthAdvance = serverMonthSummary?.this_month_advance ?? 0;
-    const prevMonthBalance = serverMonthSummary?.prev_month_balance ?? 0;
-    const totalAdvance = serverMonthSummary?.advance_received ?? (thisMonthAdvance + prevMonthBalance);
+    const openingBalance = serverMonthSummary?.opening_balance ?? 0;
+    const totalAdvance = serverMonthSummary?.advance_received ?? (thisMonthAdvance + openingBalance);
     const totalExpense = serverMonthSummary?.approved_expenses ??
       monthExpenses
         .filter((e) => (e.status === 'approved' || e.status === 'reimbursed'))
@@ -304,9 +304,10 @@ export function ExpensesPage({
       .filter((e) => e.status === 'pending')
       .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
-    const balance = serverMonthSummary?.balance ?? (totalAdvance - totalExpense);
+    // Closing balance = Total Advance - Total Expenses
+    const closingBalance = serverMonthSummary?.closing_balance ?? (totalAdvance - totalExpense);
 
-    return { totalAdvance, totalExpense, totalPending, balance, thisMonthAdvance, prevMonthBalance };
+    return { totalAdvance, totalExpense, totalPending, closingBalance, thisMonthAdvance, openingBalance };
   }, [monthExpenses, serverMonthSummary]);
 
   // ── Handle bill file select ──
@@ -544,8 +545,8 @@ export function ExpensesPage({
                   {formatCurrency(monthSummary.totalAdvance)}
                 </span>
                 <div className="text-[10px] text-muted-foreground leading-tight">
-                  <div>{prevMonthLabel} Balance: {formatCurrency(monthSummary.prevMonthBalance)}</div>
-                  <div>This Month: {formatCurrency(monthSummary.thisMonthAdvance)}</div>
+                  <div>Opening Balance (B/F): {formatCurrency(monthSummary.openingBalance)}</div>
+                  <div>This Month: +{formatCurrency(monthSummary.thisMonthAdvance)}</div>
                 </div>
               </CardContent>
             </Card>
@@ -563,14 +564,14 @@ export function ExpensesPage({
           </div>
 
           {/* Balance card */}
-          <Card className={`border-2 ${monthSummary.balance < 0 ? 'border-rose-500/40 bg-rose-500/5' : 'border-emerald-500/30 bg-emerald-500/5'}`}>
+          <Card className={`border-2 ${monthSummary.closingBalance < 0 ? 'border-rose-500/40 bg-rose-500/5' : 'border-emerald-500/30 bg-emerald-500/5'}`}>
             <CardContent className="p-3 flex items-center justify-between">
               <div>
                 <div className="text-xs text-muted-foreground mb-0.5">
-                  {monthSummary.balance < 0 ? 'Used Over Advance' : 'Remaining Balance'}
+                  {monthSummary.closingBalance < 0 ? 'Used Over Advance' : 'Closing Balance'}
                 </div>
-                <span className={`text-xl font-bold ${monthSummary.balance < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
-                  {formatCurrency(Math.abs(monthSummary.balance))}
+                <span className={`text-xl font-bold ${monthSummary.closingBalance < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                  {formatCurrency(Math.abs(monthSummary.closingBalance))}
                 </span>
               </div>
               {monthSummary.totalPending > 0 && (
