@@ -108,7 +108,7 @@ export default function SettingsView({
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Version</span>
-              <span className="text-gray-800 font-medium">1.0.0</span>
+              <span className="text-gray-800 font-medium">2.0.0</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Employee</span>
