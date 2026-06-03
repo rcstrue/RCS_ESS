@@ -355,3 +355,26 @@ Stage Summary:
 - Admin dashboard has new Role Access tab for visibility configuration
 - Version bumped to 2.0.0
 - Pushed as commit 49f2c7e to GitHub
+
+---
+Task ID: 12
+Agent: Main Agent
+Task: Fix admin login stays on login page after "Welcome back" toast (verify returns 401)
+
+Work Log:
+- Analyzed the auth flow: AdminLogin → POST /auth/login → save admin_token → navigate /admin/dashboard
+- AdminDashboard mounts → calls verifySession() → GET /auth/verify
+- In apiRequest, token resolution priority: ess_employee > ess_token > admin_token
+- Root cause: When user has ESS session (ess_employee in localStorage), the ESS token takes priority over admin_token
+- The ESS token (employee JWT) is sent to /auth/verify which expects admin JWT → 401 Unauthorized
+- Fix 1: Modified apiRequest header merge order — custom headers now override auto-resolved token (via Object.assign after token resolution)
+- Fix 2: verifySession() now explicitly passes admin_token in Authorization header, bypassing generic token resolution
+- Fix 3: adminLogin() now clears ESS tokens (ess_token, ess_employee) before login to prevent cross-contamination
+- Built successfully with vite build (790KB JS, 98KB CSS)
+- Committed and pushed as 17d2568
+
+Stage Summary:
+- 3 root cause fixes across 2 files (auth.ts, config.ts)
+- Admin login now works even when ESS session exists in localStorage
+- verifySession uses admin token specifically, not the ESS token
+- User needs to pull and rebuild on live server
