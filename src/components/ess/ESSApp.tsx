@@ -8,7 +8,6 @@ import { getFileUrl, resetSessionExpiredGuard } from '@/lib/api/config';
 // Extracted modules
 import LoginScreen from './LoginScreen';
 import ForceChangePin from './ForceChangePin';
-import FirstLoginPinPopup from './FirstLoginPinPopup';
 import DashboardHome from './DashboardHome';
 import ProfileView from './ProfileView';
 import SettingsView from './SettingsView';
@@ -27,7 +26,7 @@ import { useDashboard } from './hooks/useDashboard';
 import { usePwaInstall } from './hooks/usePwaInstall';
 
 // Helpers
-import { getGreeting, getInitials, getScope, canApprove } from './helpers';
+import { getGreeting, getInitials, getScope, canApprove, canViewDirectory } from './helpers';
 
 // shadcn/ui
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -43,8 +42,6 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
   // ── Auth ──
   const [session, setSession] = useState<ESSSession | null>(null);
   const [forcePinSession, setForcePinSession] = useState<ESSSession | null>(null);
-  const [isFirstLogin, setIsFirstLogin] = useState(false);
-  const [showFirstLoginPopup, setShowFirstLoginPopup] = useState(false);
   const [authReady, setAuthReady] = useState(false);
 
   const loadSession = useCallback(() => {
@@ -53,11 +50,9 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
       if (stored) {
         const parsed = JSON.parse(stored) as ESSSession;
         if (parsed?.employee?.id) {
-          // If user hasn't completed PIN change, show the popup (not full screen)
+          // If user hasn't completed PIN change, show full-screen force PIN change
           if (!parsed.has_custom_pin) {
             setForcePinSession(parsed);
-            setIsFirstLogin(true);
-            // Also re-save standalone token as backup for mobile localStorage reliability
             if (parsed.token) {
               localStorage.setItem('ess_token', parsed.token);
             }
@@ -76,23 +71,11 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
     setAuthReady(true);
   }, [loadSession]);
 
-  // Show first-login popup once when forcePinSession is set
-  useEffect(() => {
-    if (forcePinSession && isFirstLogin && !session) {
-      // Small delay so the dashboard renders behind the popup
-      const timer = setTimeout(() => {
-        setShowFirstLoginPopup(true);
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [forcePinSession, isFirstLogin, session]);
-
   // ── Listen for session expiry (401 interceptor dispatches this) ──
   useEffect(() => {
     const handler = () => {
       setSession(null);
       setForcePinSession(null);
-      setShowFirstLoginPopup(false);
       setCurrentPage('dashboard');
       toast.error('Session expired. Please login again.');
     };
@@ -111,7 +94,6 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
     localStorage.removeItem('ess_token');
     setSession(null);
     setForcePinSession(null);
-    setShowFirstLoginPopup(false);
     setCurrentPage('dashboard');
     toast.success('Logged out successfully');
   }, []);
@@ -123,7 +105,6 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
 
   const handleForcePinChange = useCallback((s: ESSSession) => {
     setForcePinSession(s);
-    setIsFirstLogin(true);
     // Persist to localStorage immediately
     localStorage.setItem('ess_employee', JSON.stringify(s));
     if (s.token) {
@@ -131,23 +112,13 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
     }
   }, []);
 
-  // Called when first-login popup completes (user sets PIN or cancels)
+  // Called when force PIN change completes (from full-screen ForceChangePin)
   const handleFirstLoginComplete = useCallback((s: ESSSession) => {
     setForcePinSession(null);
-    setIsFirstLogin(false);
-    setShowFirstLoginPopup(false);
     saveSession(s);
     if (s.has_custom_pin) {
       toast.success(`Welcome, ${s.employee.full_name}!`);
     }
-  }, [saveSession]);
-
-  // Called when force PIN change completes (from full-screen ForceChangePin)
-  const handleForcePinComplete = useCallback((s: ESSSession) => {
-    setForcePinSession(null);
-    setIsFirstLogin(false);
-    saveSession(s);
-    toast.success(`Welcome, ${s.employee.full_name}!`);
   }, [saveSession]);
 
   // ── Navigation ──
@@ -164,11 +135,12 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
       localStorage.removeItem('ess_token');
       setSession(null);
       setForcePinSession(null);
-      setShowFirstLoginPopup(false);
       window.location.hash = '/';
       return;
     }
     if (page === 'install-app') {
+      // Reset dismissed state so banner shows again
+      pwa.resetDismiss();
       // Try native install prompt, fallback to instructions
       pwa.install().then((accepted) => {
         if (!accepted && !pwa.state.canInstall) {
@@ -208,19 +180,19 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
     );
   }
 
-  // ── Force PIN change (full screen — only used for non-first-login forced changes) ──
-  if (forcePinSession && !isFirstLogin && !showFirstLoginPopup) {
+  // ── Force PIN change (full screen) ──
+  if (forcePinSession) {
     return (
       <ForceChangePin
         session={forcePinSession}
-        onComplete={handleForcePinComplete}
+        onComplete={handleFirstLoginComplete}
         onLogout={clearSession}
-        isFirstLogin={false}
+        isFirstLogin={true}
       />
     );
   }
 
-  // ── First login: show dashboard with PIN popup overlay ──
+  // ── Login screen ──
   if (!session && !forcePinSession) {
     return (
       <LoginScreen
@@ -231,7 +203,6 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
     );
   }
 
-  // For first login, create a temporary session to render the dashboard behind the popup
   const activeSession = session || forcePinSession;
   if (!activeSession) return null;
 
@@ -298,7 +269,7 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
             />
           </div>
         )}
-        {currentPage === 'directory' && (role === 'manager' || role === 'regional_manager' || role === 'admin') && <DirectoryPage employeeId={emp.id} role={role} scope={scope} />}
+        {currentPage === 'directory' && canViewDirectory(role) && <DirectoryPage employeeId={emp.id} role={role} scope={scope} />}
         {currentPage === 'expenses' && <ExpensesPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} />}
         {currentPage === 'attendance' && <AttendancePage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} />}
         {currentPage === 'leaves' && <LeavesPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} />}
@@ -311,21 +282,11 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
 
       <BottomNav currentPage={currentPage} showMoreMenu={showMoreMenu} setShowMoreMenu={setShowMoreMenu} onNavigate={navigate} role={role} isInstalled={pwa.state.isInstalled} />
 
-      {/* First Login PIN Popup */}
-      {forcePinSession && (
-        <FirstLoginPinPopup
-          open={showFirstLoginPopup}
-          session={forcePinSession}
-          onComplete={handleFirstLoginComplete}
-          onDismiss={handleFirstLoginComplete}
-        />
-      )}
-
       {/* Post-Install Permission Dialog */}
       <PermissionDialog
-        open={pwa.shouldShowPermissions && !showFirstLoginPopup}
+        open={pwa.shouldShowPermissions}
         onRequest={pwa.requestPermissions}
-        onSkip={pwa.requestPermissions} // Will mark as done on skip too
+        onSkip={pwa.requestPermissions}
         currentPermissions={pwa.state.permissions}
       />
     </div>

@@ -68,21 +68,19 @@ export function InstallBanner({
         </p>
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        {!isIOS && (
-          <Button
-            size="sm"
-            className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium gap-1.5"
-            onClick={handleInstall}
-            disabled={installing}
-          >
-            {installing ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Download className="w-3.5 h-3.5" />
-            )}
-            Install
-          </Button>
-        )}
+        <Button
+          size="sm"
+          className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium gap-1.5"
+          onClick={handleInstall}
+          disabled={installing}
+        >
+          {installing ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Download className="w-3.5 h-3.5" />
+          )}
+          {isIOS ? 'How to Install' : 'Install'}
+        </Button>
         <button
           onClick={onDismiss}
           className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-emerald-100 transition-colors"

@@ -31,6 +31,7 @@ interface RegistrationWizardProps {
   existingEmployeeId?: string;
   existingEmployee?: {
     full_name?: string | null;
+    father_name?: string | null;
     date_of_birth?: string | null;
     gender?: string | null;
     aadhaar_number?: string | null;
@@ -79,7 +80,7 @@ const createInitialData = (
   },
   aadhaarDetails: {
     fullName: emp?.full_name || '',
-    fatherHusbandName: '',
+    fatherHusbandName: emp?.father_name || '',
     dateOfBirth: emp?.date_of_birth || '',
     gender: (emp?.gender as AadhaarDetails['gender']) || '',
     aadhaarNumber: emp?.aadhaar_number || '',

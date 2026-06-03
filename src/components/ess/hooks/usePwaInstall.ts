@@ -116,16 +116,18 @@ export function usePwaInstall() {
   // ── Install PWA (Chrome native prompt) ──
   const install = useCallback(async () => {
     const prompt = deferredPromptRef.current;
-    if (!prompt) return false;
+    if (prompt) {
+      await prompt.prompt();
+      const result = await prompt.userChoice;
+      deferredPromptRef.current = null;
 
-    await prompt.prompt();
-    const result = await prompt.userChoice;
-    deferredPromptRef.current = null;
-
-    if (result.outcome === 'accepted') {
-      setState((prev) => ({ ...prev, canInstall: false, isInstalled: true }));
-      return true;
+      if (result.outcome === 'accepted') {
+        setState((prev) => ({ ...prev, canInstall: false, isInstalled: true }));
+        return true;
+      }
+      return false;
     }
+    // No native prompt available — show manual instructions
     return false;
   }, []);
 
@@ -133,6 +135,12 @@ export function usePwaInstall() {
   const dismiss = useCallback(() => {
     try { localStorage.setItem(DISMISSED_KEY, 'true'); } catch { /* ignore */ }
     setState((prev) => ({ ...prev, dismissed: true }));
+  }, []);
+
+  // ── Reset dismissed state (so banner shows again) ──
+  const resetDismiss = useCallback(() => {
+    try { localStorage.removeItem(DISMISSED_KEY); } catch { /* ignore */ }
+    setState((prev) => ({ ...prev, dismissed: false }));
   }, []);
 
   // ── Request permissions after install ──
@@ -183,6 +191,7 @@ export function usePwaInstall() {
     shouldShowPermissions,
     install,
     dismiss,
+    resetDismiss,
     requestPermissions,
     checkPermissions,
   };

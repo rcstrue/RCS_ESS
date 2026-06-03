@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { getAdminSession, adminLogout, verifySession, getAdminRole, AdminUser } from '@/lib/api/auth';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LogOut, Users, Building2, Briefcase, Loader2, UserCog } from 'lucide-react';
+import { LogOut, Users, Building2, Briefcase, Loader2, UserCog, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import { EmployeeManagement } from '@/components/admin/EmployeeManagement';
 import { ClientManagement } from '@/components/admin/ClientManagement';
 import { DesignationManagement } from '@/components/admin/DesignationManagement';
 import { UserManagement } from '@/components/admin/UserManagement';
+import { RoleAccessManagement } from '@/components/admin/RoleAccessManagement';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -19,7 +20,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     const checkAuth = async () => {
       const session = getAdminSession();
-      
+
       if (!session) {
         navigate('/admin/login');
         return;
@@ -27,7 +28,7 @@ export default function AdminDashboard() {
 
       // Verify session with server
       const { data, error } = await verifySession();
-      
+
       if (error || !data?.valid) {
         adminLogout();
         navigate('/admin/login');
@@ -64,7 +65,7 @@ export default function AdminDashboard() {
           <div>
             <h1 className="text-xl font-bold text-foreground">Admin Dashboard</h1>
             <p className="text-sm text-muted-foreground">
-              {user?.email} • {userRole === 'admin' ? 'Administrator' : 'Manager'}
+              {user?.email} &middot; {userRole === 'admin' ? 'Administrator' : 'Manager'}
             </p>
           </div>
           <Button variant="outline" onClick={handleLogout}>
@@ -84,7 +85,7 @@ export default function AdminDashboard() {
             </TabsTrigger>
             <TabsTrigger value="clients" className="gap-2">
               <Building2 className="w-4 h-4" />
-              Clients & Units
+              Clients &amp; Units
             </TabsTrigger>
             <TabsTrigger value="designations" className="gap-2">
               <Briefcase className="w-4 h-4" />
@@ -94,6 +95,12 @@ export default function AdminDashboard() {
               <TabsTrigger value="users" className="gap-2">
                 <UserCog className="w-4 h-4" />
                 Users
+              </TabsTrigger>
+            )}
+            {userRole === 'admin' && (
+              <TabsTrigger value="role-access" className="gap-2">
+                <Shield className="w-4 h-4" />
+                Role Access
               </TabsTrigger>
             )}
           </TabsList>
@@ -113,6 +120,12 @@ export default function AdminDashboard() {
           {userRole === 'admin' && (
             <TabsContent value="users">
               <UserManagement />
+            </TabsContent>
+          )}
+
+          {userRole === 'admin' && (
+            <TabsContent value="role-access">
+              <RoleAccessManagement />
             </TabsContent>
           )}
         </Tabs>

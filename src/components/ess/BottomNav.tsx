@@ -5,6 +5,7 @@ import { Separator } from '@/components/ui/separator';
 import { ChevronRight, LogOut } from 'lucide-react';
 import { NAV_ITEMS, MORE_MENU_ITEMS } from './constants';
 import type { EmployeeRole } from '@/lib/ess-types';
+import { canViewDirectory } from './helpers';
 
 // ══════════════════════════════════════════════════════════════
 // Bottom Navigation Bar
@@ -17,11 +18,6 @@ interface BottomNavProps {
   onNavigate: (page: string) => void;
   role: EmployeeRole;
   isInstalled: boolean;
-}
-
-// Only manager+ roles can see the Employees (Directory) page
-function canViewDirectory(role: EmployeeRole): boolean {
-  return role === 'manager' || role === 'regional_manager' || role === 'admin';
 }
 
 export default function BottomNav({ currentPage, showMoreMenu, setShowMoreMenu, onNavigate, role, isInstalled }: BottomNavProps) {

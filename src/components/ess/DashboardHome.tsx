@@ -260,13 +260,29 @@ export default function DashboardHome({
 
               {/* Location */}
               {att?.location && (
-                <div className="flex items-center gap-2 px-1">
+                <div className="flex items-center gap-2 px-1 py-1">
                   <div className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 shrink-0">
                     <MapPin className="w-3 h-3 text-emerald-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[10px] text-gray-400">Location</p>
+                    <p className="text-[10px] text-gray-400">Check-in Location</p>
                     <p className="text-xs font-medium text-gray-700 truncate">{att.location}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Check-in time with location */}
+              {att?.check_in && (
+                <div className="flex items-center gap-2 px-1">
+                  <div className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 shrink-0">
+                    <LogIn className="w-3 h-3 text-emerald-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-gray-400">Check-in Time</p>
+                    <p className="text-xs font-medium text-gray-700">
+                      {checkInTime || '—'}
+                      {att?.location && <span className="text-gray-400 ml-1">• {att.location}</span>}
+                    </p>
                   </div>
                 </div>
               )}

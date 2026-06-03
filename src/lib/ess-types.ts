@@ -55,7 +55,7 @@ export interface Employee {
   updated_at?: string;
 }
 
-export type EmployeeRole = 'employee' | 'supervisor' | 'manager' | 'regional_manager';
+export type EmployeeRole = 'employee' | 'supervisor' | 'manager' | 'regional_manager' | 'field_officer' | 'admin';
 
 // ===== Auth =====
 export interface LoginResponse {

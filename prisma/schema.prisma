@@ -30,3 +30,14 @@ model Post {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+model RoleAccess {
+  id              Int      @id @default(autoincrement())
+  role            String   @unique
+  canViewSites    Boolean  @default(false)
+  canViewUnits    Boolean  @default(false)
+  canViewEmployees Boolean @default(false)
+  canViewLocations Boolean @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
