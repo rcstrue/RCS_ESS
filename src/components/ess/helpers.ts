@@ -165,23 +165,28 @@ interface HighAccuracyCoords {
 /**
  * Get the most accurate GPS position within a time budget.
  *
- * Strategy:
+ * Strategy (designed for Indian Android phones where GPS convergence is slow):
  * 1. Start watchPosition (enableHighAccuracy + maximumAge: 0)
- * 2. Collect readings for up to `watchMs` milliseconds
- * 3. Reject readings with accuracy > `maxAccuracy` meters
- * 4. If a reading ≤20m is found, stop immediately (fast path)
- * 5. Otherwise return the most accurate reading collected
- * 6. Fallback: if GPS fails entirely, use getCurrentPosition as backup
+ * 2. Collect ALL readings (even inaccurate ones) — DON'T reject any
+ * 3. Track improvement: if accuracy is improving (getting better), keep waiting
+ * 4. If a reading ≤30m is found, accept immediately (satellite lock achieved)
+ * 5. After max wait, return the most accurate reading collected
+ * 6. Improvement detection: require 3 consecutive improving readings before
+ *    declaring convergence (avoids accepting a lucky cell-tower bounce)
+ *
+ * Why this works better than the old approach:
+ * - Old: rejected readings >50m → often collected ZERO readings in 8s →
+ *   fallback to getCurrentPosition → cell tower (~1-5km error)
+ * - New: collects ALL readings, waits for convergence, gives GPS 15s to
+ *   get satellite fix → typically achieves ≤30m accuracy
  */
 export function getHighAccuracyPosition(options?: {
-  watchMs?: number;       // how long to watch (default 8000ms = 8s)
-  maxAccuracy?: number;   // reject readings worse than this (default 50m)
-  fastAccuracy?: number;  // accept immediately if within this (default 20m)
+  watchMs?: number;       // how long to watch (default 15000ms = 15s)
+  fastAccuracy?: number;  // accept immediately if within this (default 30m)
 }): Promise<HighAccuracyCoords | null> {
   const {
-    watchMs = 8000,
-    maxAccuracy = 50,
-    fastAccuracy = 20,
+    watchMs = 15000,
+    fastAccuracy = 30,
   } = options || {};
 
   return new Promise((resolve) => {
@@ -193,6 +198,7 @@ export function getHighAccuracyPosition(options?: {
     const readings: HighAccuracyCoords[] = [];
     let watchId: number | null = null;
     let settled = false;
+    let improvingStreak = 0; // count of consecutively improving readings
 
     const finish = (coords: HighAccuracyCoords | null) => {
       if (settled) return;
@@ -212,13 +218,30 @@ export function getHighAccuracyPosition(options?: {
 
         const reading: HighAccuracyCoords = { latitude, longitude, accuracy: accuracy ?? 999 };
 
-        // Skip wildly inaccurate readings (cell tower only)
-        if (reading.accuracy > maxAccuracy) return;
+        // Track improvement: is this reading better than the previous best?
+        const prevBest = readings.length > 0
+          ? Math.min(...readings.map((r) => r.accuracy))
+          : Infinity;
 
+        // Collect ALL readings (even inaccurate) — we need the best one at the end
         readings.push(reading);
 
-        // Fast path: if we already have ≤20m accuracy, stop immediately
+        // Check if accuracy is improving
+        if (reading.accuracy < prevBest) {
+          improvingStreak++;
+        } else {
+          improvingStreak = 0;
+        }
+
+        // Fast path: satellite lock achieved — accept immediately
         if (reading.accuracy <= fastAccuracy) {
+          finish(reading);
+          return;
+        }
+
+        // Convergence detected: 3+ consecutive improvements and accuracy < 100m
+        // This means GPS is actively converging on satellites
+        if (improvingStreak >= 3 && reading.accuracy < 100) {
           finish(reading);
           return;
         }
@@ -233,7 +256,7 @@ export function getHighAccuracyPosition(options?: {
       {
         enableHighAccuracy: true,
         maximumAge: 0,         // never use cached position
-        timeout: 15000,        // per-reading timeout
+        timeout: 20000,        // per-reading timeout (20s)
       },
     );
 
@@ -251,7 +274,7 @@ export function getHighAccuracyPosition(options?: {
         readings.sort((a, b) => a.accuracy - b.accuracy);
         finish(readings[0]);
       } else {
-        // No good readings collected — fallback to single getCurrentPosition
+        // No readings at all — fallback to single getCurrentPosition
         navigator.geolocation.getCurrentPosition(
           (pos) => {
             if (pos.coords.latitude != null && pos.coords.longitude != null) {

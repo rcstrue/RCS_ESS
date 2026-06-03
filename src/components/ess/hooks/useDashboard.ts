@@ -92,9 +92,8 @@ export function useDashboard(session: ESSSession | null) {
       let latitude: number | undefined;
       let longitude: number | undefined;
       const gps = await getHighAccuracyPosition({
-        watchMs: 8000,      // watch up to 8 seconds for GPS convergence
-        maxAccuracy: 50,    // reject readings worse than 50m
-        fastAccuracy: 20,   // accept immediately if ≤20m accuracy
+        watchMs: 15000,     // watch up to 15 seconds for GPS satellite convergence
+        fastAccuracy: 30,   // accept immediately if ≤30m accuracy (satellite lock)
       });
       if (gps) {
         latitude = gps.latitude;
