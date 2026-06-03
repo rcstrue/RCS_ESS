@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import { adminLogout, AdminUser } from '@/lib/api/auth';
 import { EmployeeManagement } from './EmployeeManagement';
+import { SalaryUpload } from './SalaryUpload';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { LogOut, Users } from 'lucide-react';
+import { LogOut, Users, FileSpreadsheet } from 'lucide-react';
 
 interface AdminDashboardProps {
   user: AdminUser;
@@ -55,10 +56,18 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
               <Users className="w-4 h-4" />
               Employees
             </TabsTrigger>
+            <TabsTrigger value="salary-upload" className="gap-2">
+              <FileSpreadsheet className="w-4 h-4" />
+              Salary Upload
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="employees">
             <EmployeeManagement userRole={user.role} />
+          </TabsContent>
+
+          <TabsContent value="salary-upload">
+            <SalaryUpload />
           </TabsContent>
         </Tabs>
       </main>
