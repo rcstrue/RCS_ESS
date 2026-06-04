@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RCS Registration App</title>
+    <meta name="description" content="RCS Facility Employee Registration Portal" />
+    <meta name="author" content="RCS Facility" />
+
+    <meta property="og:title" content="RCS Registration App" />
+    <meta property="og:description" content="RCS Facility Employee Registration Portal" />
+    <meta property="og:type" content="website" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@RCSFacility" />
+    
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/logo.ico" />
+
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#059669">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="RCS ESS">
+    <link rel="apple-touch-icon" href="/logo.png">
+    <script type="module" crossorigin src="/assets/index-BtVHKctD.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DFKQxgF4.css">
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+    </script>
+  </body>
+</html>
