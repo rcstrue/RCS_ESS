@@ -525,3 +525,38 @@ Stage Summary:
 - Fixed useDashboard.ts: pendingExpenses now uses fetchPendingTeamExpenses()
 - Pushed to GitHub: main branch (c28f1a4)
 - Build successful
+---
+Task ID: 2-1, 2-2, 2-3
+Agent: Main Agent (via subagents)
+Task: Implement 11 new ESS features + Admin panel orphaned tabs integration
+
+Work Log:
+- Created useNotifications.ts hook + NotificationsPage.tsx — local notification system with bell icon, unread badge, mark-as-read, mark-all-read, clear-all
+- Created HolidaysPage.tsx — Indian public holidays calendar for 2026 with 15 hardcoded holidays, color-coded by type
+- Created EditProfilePage.tsx — Employee self-edit form (address, emergency contact, blood group, marital status)
+- Created RegularizationPage.tsx — Attendance regularization request form with type selector
+- Created ConfirmDialog.tsx — Shared confirmation dialog component (destructive/default variants)
+- Created usePullToRefresh.ts hook — Touch-based pull-to-refresh with rubber-band dampening, applied to all 7 list pages
+- Created useExportCSV.ts hook — CSV export with UTF-8 BOM, applied to attendance, leaves, expenses, tasks
+- Updated ExpensesPage.tsx — Added "Approve" tab for managers with search bar, approve/reject buttons, rejection dialog
+- Updated TasksPage.tsx — Added task comments feature (Sheet with localStorage-stored comment threads), search bar, priority filter
+- Updated HelpdeskPage.tsx — Added reply thread (Sheet with localStorage-stored replies), search bar, reply count badges
+- Updated LeavesPage.tsx — Added search bar, leave type filter, CSV export, cancel confirmation dialog
+- Updated AttendancePage.tsx — Added status filter dropdown, CSV export, pull-to-refresh
+- Updated AnnouncementsPage.tsx — Added pull-to-refresh
+- Updated DirectoryPage.tsx — Added pull-to-refresh
+- Updated SettingsView.tsx — Added logout confirmation dialog
+- Updated DashboardHome.tsx — Added onAddNotification prop, auto-fires pending approvals notification
+- Updated ESSApp.tsx — Integrated all new pages, notification hook, bell icon in header
+- Updated ProfileView.tsx — Added Edit Profile button
+- Updated constants.ts — Added notifications, holidays, regularization to MORE_MENU_ITEMS
+- Updated AdminDashboard.tsx — Integrated orphaned tabs: UserManagement, DesignationManagement, ClientManagement, RoleAccessManagement (6 tabs total)
+- Build passed: 1815 modules, 837KB JS, 100KB CSS
+- Committed as f3c2ab3, pushed to GitHub main
+
+Stage Summary:
+- 8 new files created, 17 files modified, 25 files total (+2,217/-144 lines)
+- 11 ESS features implemented: notifications, holidays, edit profile, expense approval, regularization, pull-to-refresh, CSV export, helpdesk replies, task comments, search/filter, confirmation dialogs
+- Admin panel: integrated 4 orphaned tabs into AdminDashboard (Users, Designations, Clients & Units, Role Access)
+- Build and lint pass with zero errors (8 benign react-refresh warnings)
+- Deploy command: cd ~/RCS_ESS && git pull origin main && bun install && bun run build && rsync -av dist/ ~/domains/join.rcsfacility.com/public_html/ && rsync -av --exclude='config.php' api/ess/ ~/domains/join.rcsfacility.com/public_html/api/ess/
