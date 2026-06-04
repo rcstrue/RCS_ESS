@@ -5,21 +5,14 @@ import {
   Loader2,
   Receipt,
   Wallet,
-  CheckCircle2,
-  XCircle,
-  Clock,
   Banknote,
   IndianRupee,
   CalendarDays,
-  Check,
   X,
   Upload,
   ChevronLeft,
   ChevronRight,
   Image as ImageIcon,
-  ArrowDownCircle,
-  ArrowUpRight,
-  TrendingUp,
   Landmark,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -101,9 +94,6 @@ const TYPE_LABEL: Record<string, string> = {
   medical: 'Medical',
 };
 
-const MONTH_NAMES = ['', 'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'];
-
 // ── Formatters ──
 const formatCurrency = (amount: number | undefined | null): string => {
   const num = Number(amount);
@@ -147,11 +137,6 @@ const formatMonthYear = (monthStr: string): string => {
   return date.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
 };
 
-/** Format month number + year to "Month Year" */
-const formatMonthYearFromNumbers = (month: number, year: number): string => {
-  return `${MONTH_NAMES[month] || ''} ${year}`;
-};
-
 /** Navigate months: +1 or -1 */
 const navigateMonth = (monthStr: string, direction: number): string => {
   const [year, month] = monthStr.split('-').map(Number);
@@ -174,11 +159,6 @@ export function ExpensesPage({
 
   // ── Advance tab state ──
   const [advanceAllocations, setAdvanceAllocations] = useState<AdvanceAllocation[]>([]);
-  const [advanceSummary, setAdvanceSummary] = useState<{
-    total_allocated: number;
-    total_used: number;
-    running_balance: number;
-  } | null>(null);
   const [isLoadingAdvance, setIsLoadingAdvance] = useState(true);
 
   // My expenses
@@ -233,11 +213,6 @@ export function ExpensesPage({
         toast.error('Failed to load advances');
       } else if (data) {
         setAdvanceAllocations(data.items ?? []);
-        setAdvanceSummary({
-          total_allocated: data.total_allocated ?? 0,
-          total_used: data.total_used ?? 0,
-          running_balance: data.running_balance ?? 0,
-        });
       }
     } catch {
       toast.error('Failed to load advances');
@@ -250,7 +225,7 @@ export function ExpensesPage({
     loadAdvanceAllocations();
   }, [loadAdvanceAllocations]);
 
-  // ── Load my expenses ──
+  // ── Load month data (expenses + month summary) ──
   const loadMyExpenses = useCallback(async (month?: string) => {
     setIsLoadingMy(true);
     try {
@@ -272,12 +247,10 @@ export function ExpensesPage({
     }
   }, [employeeId]);
 
-  // Load expenses when switching to expenses tab or month changes
+  // Load month data whenever month changes (needed for both tabs)
   useEffect(() => {
-    if (activeTab === 'expenses') {
-      loadMyExpenses(selectedMonth);
-    }
-  }, [selectedMonth, activeTab, loadMyExpenses]);
+    loadMyExpenses(selectedMonth);
+  }, [selectedMonth, loadMyExpenses]);
 
   // ── Load expense types & categories from DB ──
   useEffect(() => {
@@ -295,6 +268,20 @@ export function ExpensesPage({
       return e.expense_date.startsWith(selectedMonth);
     });
   }, [myExpenses, selectedMonth]);
+
+  // ── Month-filtered advance allocations ──
+  const [selYear, selMonth] = useMemo(() => {
+    const [y, m] = selectedMonth.split('-').map(Number);
+    return [y, m];
+  }, [selectedMonth]);
+
+  const monthAdvanceAllocations = useMemo(() => {
+    return advanceAllocations.filter((a) => a.year === selYear && a.month === selMonth);
+  }, [advanceAllocations, selYear, selMonth]);
+
+  const thisMonthAdvanceTotal = useMemo(() => {
+    return monthAdvanceAllocations.reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
+  }, [monthAdvanceAllocations]);
 
   // ── Summary for selected month (running balance) ──
   const monthSummary = useMemo(() => {
@@ -413,16 +400,38 @@ export function ExpensesPage({
   };
 
   // ── Render ──
-  if (isLoadingAdvance && activeTab === 'advance') {
-    return <LoadingSkeleton />;
-  }
-
   return (
     <div className="flex flex-col gap-4 pb-4">
       {/* Header */}
       <div className="flex items-center gap-2">
         <Receipt className="h-5 w-5 text-primary" />
         <h2 className="text-lg font-semibold">Expenses</h2>
+      </div>
+
+      {/* Month Picker — above tabs, shared by both tabs */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setSelectedMonth((m) => navigateMonth(m, -1))}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm font-medium px-2 min-w-[140px] text-center">
+            {formatMonthYear(selectedMonth)}
+          </span>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setSelectedMonth((m) => navigateMonth(m, 1))}
+            disabled={selectedMonth >= currentMonthString()}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -444,111 +453,112 @@ export function ExpensesPage({
         </TabsList>
 
         {/* ═══════════════════════════════════════════════════════════════
-           TAB 1: My Advance — Shows all advance received from office
+           TAB 1: My Advance — Shows advance for the selected month
            ═══════════════════════════════════════════════════════════════ */}
         <TabsContent value="advance" className="mt-4">
-          {isLoadingAdvance ? (
+          {isLoadingAdvance || isLoadingMy ? (
             <LoadingSkeleton />
           ) : (
             <>
-              {/* Summary cards */}
-              <div className="grid grid-cols-3 gap-3 mb-3">
+              {/* Summary: Opening Balance + This Month Advance */}
+              <div className="grid grid-cols-2 gap-3 mb-3">
                 <Card>
                   <CardContent className="p-3 flex flex-col gap-1">
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <ArrowDownCircle className="h-3.5 w-3.5 text-emerald-500" />
-                      Received
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Banknote className="h-3.5 w-3.5 text-emerald-500" />
+                      Total Available
                     </div>
-                    <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
-                      {formatCurrency(advanceSummary?.total_allocated ?? 0)}
+                    <span className="text-base font-bold text-emerald-700 dark:text-emerald-400">
+                      {formatCurrency(monthSummary.totalAdvance)}
                     </span>
-                    <span className="text-[9px] text-muted-foreground">Total Advance</span>
+                    <div className="text-[10px] text-muted-foreground leading-tight">
+                      <div>Opening Balance (B/F): {formatCurrency(monthSummary.openingBalance)}</div>
+                      <div>This Month: +{formatCurrency(thisMonthAdvanceTotal)}</div>
+                    </div>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardContent className="p-3 flex flex-col gap-1">
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <ArrowUpRight className="h-3.5 w-3.5 text-blue-500" />
-                      Used
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Receipt className="h-3.5 w-3.5 text-blue-500" />
+                      Expenses Used
                     </div>
-                    <span className="text-sm font-bold text-blue-700 dark:text-blue-400">
-                      {formatCurrency(advanceSummary?.total_used ?? 0)}
+                    <span className="text-base font-bold text-blue-700 dark:text-blue-400">
+                      {formatCurrency(monthSummary.totalExpense)}
                     </span>
-                    <span className="text-[9px] text-muted-foreground">Total Expenses</span>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-3 flex flex-col gap-1">
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <TrendingUp className="h-3.5 w-3.5 text-amber-500" />
-                      Balance
-                    </div>
-                    <span className={`text-sm font-bold ${(advanceSummary?.running_balance ?? 0) < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
-                      {formatCurrency(advanceSummary?.running_balance ?? 0)}
-                    </span>
-                    <span className="text-[9px] text-muted-foreground">Remaining</span>
                   </CardContent>
                 </Card>
               </div>
 
-              {/* Running Balance card */}
-              <Card className={`border-2 mb-4 ${(advanceSummary?.running_balance ?? 0) < 0 ? 'border-rose-500/40 bg-rose-500/5' : 'border-emerald-500/30 bg-emerald-500/5'}`}>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-1">
-                        {(advanceSummary?.running_balance ?? 0) < 0 ? 'Over Utilized' : 'Available Balance'}
-                      </div>
-                      <span className={`text-2xl font-bold ${(advanceSummary?.running_balance ?? 0) < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
-                        {formatCurrency(advanceSummary?.running_balance ?? 0)}
-                      </span>
+              {/* Closing Balance card */}
+              <Card className={`border-2 mb-3 ${monthSummary.closingBalance < 0 ? 'border-rose-500/40 bg-rose-500/5' : 'border-emerald-500/30 bg-emerald-500/5'}`}>
+                <CardContent className="p-3 flex items-center justify-between">
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-0.5">
+                      {monthSummary.closingBalance < 0 ? 'Used Over Advance' : 'Closing Balance'}
                     </div>
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10">
-                      <Banknote className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-                    </div>
+                    <span className={`text-xl font-bold ${monthSummary.closingBalance < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                      {formatCurrency(Math.abs(monthSummary.closingBalance))}
+                    </span>
+                  </div>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10">
+                    <Banknote className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Advance Allocations list */}
-              {advanceAllocations.length === 0 ? (
+              {/* Advance Records for this month */}
+              {monthAdvanceAllocations.length === 0 ? (
                 <EmptyState
-                  title="No advances received"
-                  description="Advance allocations from the office will appear here."
+                  title="No advance this month"
+                  description={`No advance allocation received for ${formatMonthYear(selectedMonth)}.`}
                   icon="advance"
                 />
               ) : (
-                <ScrollArea className="h-[calc(100vh-420px)]">
-                  <div className="flex flex-col gap-2">
-                    {advanceAllocations.map((alloc) => (
-                      <Card key={alloc.id} className="border">
-                        <CardContent className="p-3 flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10">
-                              <Landmark className="h-4.5 w-4.5 text-emerald-600 dark:text-emerald-400" />
-                            </div>
-                            <div>
-                              <div className="text-sm font-semibold">
-                                {formatMonthYearFromNumbers(alloc.month, alloc.year)}
-                              </div>
-                              {alloc.remarks && (
-                                <div className="text-[11px] text-muted-foreground truncate max-w-[180px]">
-                                  {alloc.remarks}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-base font-bold text-emerald-700 dark:text-emerald-400">
-                              {formatCurrency(alloc.amount)}
-                            </div>
-                            <div className="text-[9px] text-muted-foreground">Advance</div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
+                <>
+                  <div className="text-xs font-medium text-muted-foreground mb-2">
+                    Advance Received — {formatMonthYear(selectedMonth)}
                   </div>
-                </ScrollArea>
+                  <ScrollArea className="h-[calc(100vh-460px)]">
+                    <div className="flex flex-col gap-2">
+                      {monthAdvanceAllocations.map((alloc) => (
+                        <Card key={alloc.id} className="border">
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-start gap-3">
+                                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 mt-0.5">
+                                  <Landmark className="h-4.5 w-4.5 text-emerald-600 dark:text-emerald-400" />
+                                </div>
+                                <div>
+                                  <div className="text-sm font-semibold">
+                                    Office Advance
+                                  </div>
+                                  {alloc.remarks && (
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      {alloc.remarks}
+                                    </p>
+                                  )}
+                                  {alloc.created_at && (
+                                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                                      <CalendarDays className="h-3 w-3" />
+                                      {formatDate(alloc.created_at)}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-base font-bold text-emerald-700 dark:text-emerald-400">
+                                  {formatCurrency(alloc.amount)}
+                                </div>
+                                <div className="text-[9px] text-muted-foreground">Allocated</div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </>
               )}
             </>
           )}
@@ -558,30 +568,6 @@ export function ExpensesPage({
            TAB 2: My Expenses — Shows expenses with month navigation
            ═══════════════════════════════════════════════════════════════ */}
         <TabsContent value="expenses" className="mt-4">
-          {/* Month navigator */}
-          <div className="flex items-center justify-end gap-1 mb-3">
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => setSelectedMonth((m) => navigateMonth(m, -1))}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-sm font-medium px-2 min-w-[140px] text-center">
-              {formatMonthYear(selectedMonth)}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => setSelectedMonth((m) => navigateMonth(m, 1))}
-              disabled={selectedMonth >= currentMonthString()}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-
           {/* Summary cards */}
           <div className="grid grid-cols-2 gap-3 mb-3">
             <Card>
