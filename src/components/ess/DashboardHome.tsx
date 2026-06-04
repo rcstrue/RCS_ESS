@@ -189,7 +189,7 @@ export default function DashboardHome({
       {/* Pending Approvals Alert */}
       {hasApprovals && (
         <button
-          onClick={() => onNavigate('leaves')}
+          onClick={() => onNavigate(dashboardData!.pendingLeaves > 0 ? 'leaves' : 'expenses')}
           className="w-full flex items-center gap-3 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-left transition-colors hover:bg-amber-100"
         >
           <div className="flex items-center justify-center w-10 h-10 rounded-full bg-amber-100 shrink-0">

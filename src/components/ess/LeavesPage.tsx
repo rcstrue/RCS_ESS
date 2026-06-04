@@ -32,8 +32,7 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Separator } from '@/components/ui/separator';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import {
   Plus,
   CalendarDays,
@@ -352,7 +351,7 @@ export default function LeavesPage({
   return (
     <div className="space-y-4 pb-6">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="w-full grid grid-cols-3">
+        <TabsList className="w-full flex">
           <TabsTrigger value="balance" className="gap-1.5 text-xs sm:text-sm">
             <Leaf className="h-3.5 w-3.5 hidden sm:block" />
             Balance

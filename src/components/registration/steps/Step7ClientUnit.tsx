@@ -54,12 +54,7 @@ export function Step7ClientUnit({
       getDesignations()
     ]);
     
-    console.log('Clients API response:', clientsResult);
-    console.log('Designations API response:', designationsResult);
-    
     if (clientsResult.data) {
-      console.log('Clients data:', clientsResult.data);
-      console.log('First client units:', clientsResult.data[0]?.units);
       setClients(clientsResult.data);
     }
     if (designationsResult.data) {

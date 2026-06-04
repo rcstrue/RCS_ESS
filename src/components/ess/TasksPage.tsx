@@ -145,13 +145,7 @@ export function TasksPage({ employeeId, employeeName, role, canApprove }: TasksP
         limit: 100,
       });
       if (data?.items) {
-        // Include self in the list for assignment
-        const selfExists = data.items.some((e) => e.id === employeeId);
-        if (!selfExists) {
-          setTeamEmployees(data.items);
-        } else {
-          setTeamEmployees(data.items);
-        }
+        setTeamEmployees(data.items);
       }
     } catch {
       // Silently fail – fallback to self only
@@ -412,7 +406,7 @@ export function TasksPage({ employeeId, employeeName, role, canApprove }: TasksP
                   type="date"
                   value={createDeadline}
                   onChange={(e) => setCreateDeadline(e.target.value)}
-                  min={new Date().toISOString().split('T')[0]}
+                  min={new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })}
                 />
               </div>
             </div>

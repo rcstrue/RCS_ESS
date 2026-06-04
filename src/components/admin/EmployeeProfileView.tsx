@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, User, Phone, Mail, MapPin, Building, Calendar, FileText, Users, Loader2 } from 'lucide-react';
+import { apiRequest } from '@/lib/api/config';
 
 interface EmployeeProfileViewProps {
   employeeId: number;
   onBack: () => void;
 }
-
-const API_BASE = 'https://join.rcsfacility.com/api';
 
 interface EmployeeDetails {
   id: number;
@@ -52,13 +51,14 @@ export const EmployeeProfileView: React.FC<EmployeeProfileViewProps> = ({ employ
   const fetchEmployeeDetails = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}/employee.php?id=${employeeId}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setEmployee(data.data);
+      const result = await apiRequest<{ success: boolean; data?: EmployeeDetails; message?: string }>(
+        `/employee.php?id=${employeeId}`
+      );
+
+      if (result.data?.success && result.data.data) {
+        setEmployee(result.data.data);
       } else {
-        setError(data.message || 'Failed to fetch employee details');
+        setError(result.error || result.data?.message || 'Failed to fetch employee details');
       }
     } catch (err) {
       console.error('Error fetching employee:', err);

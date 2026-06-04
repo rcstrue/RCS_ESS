@@ -165,7 +165,6 @@ export function ProfilePhotoCapture({
           sizeKB = (result.length * 3) / 4 / 1024;
         }
         
-        console.log(`Profile image compressed: ${Math.round(sizeKB)}KB at quality ${quality.toFixed(1)}`);
         resolve(result);
       };
       img.onerror = () => {

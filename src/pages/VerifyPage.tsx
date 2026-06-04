@@ -29,8 +29,6 @@ export default function VerifyPage() {
       // Parse query params from hash URL (for HashRouter)
       // URL format: https://join.rcsfacility.com/#/verify?id=1685&code=1665
       const hash = window.location.hash;
-      console.log('Full URL:', window.location.href);
-      console.log('Hash:', hash);
       
       // Extract query string from hash
       const queryIndex = hash.indexOf('?');
@@ -42,13 +40,11 @@ export default function VerifyPage() {
       }
       
       const queryString = hash.substring(queryIndex + 1);
-      console.log('Query string:', queryString);
       
       const params = new URLSearchParams(queryString);
       const id = params.get('id');
       const code = params.get('code');
       
-      console.log('Parsed ID:', id, 'Code:', code);
       
       if (!id) {
         setError('Invalid verification link - missing ID');
@@ -57,10 +53,7 @@ export default function VerifyPage() {
       }
 
       try {
-        console.log('Fetching employee with ID:', id);
         const { data, error: fetchError } = await getEmployeeById(parseInt(id));
-        
-        console.log('API Response:', { data, error: fetchError });
         
         if (fetchError) {
           setError(`Employee not found: ${fetchError}`);
@@ -77,11 +70,8 @@ export default function VerifyPage() {
         // Verify employee code matches (if code is provided)
         if (code) {
           const dbCode = data.employee_code?.toString();
-          console.log('Comparing codes - DB:', dbCode, 'URL:', code);
           
-          if (dbCode !== code) {
-            console.warn('Code mismatch, but showing employee info anyway');
-          }
+          // Code mismatch — showing employee info anyway
         }
 
         setEmployee(data);

@@ -38,9 +38,6 @@ export default function Home() {
   const [adminUser, setAdminUser] = useState<AdminUser | null>(initializeAdminSession);
 
   const handleMobileSubmit = useCallback((mobile: string, profilePicUrl?: string) => {
-    console.log('=== handleMobileSubmit called ===');
-    console.log('mobile:', mobile);
-    console.log('profilePicUrl:', profilePicUrl);
     setRegistrationMobile(mobile);
     setRegistrationProfilePic(profilePicUrl);
     setShowRegistration(true);

@@ -78,18 +78,15 @@ export function MobileEntry({ onMobileSubmit, onLoginSubmit, checkMobileExists }
   };
 
   const handleProfileCapture = async (imageData: string) => {
-    console.log('=== MobileEntry handleProfileCapture called ===');
     setIsUploadingProfile(true);
     try {
       const { url, error } = await uploadBase64Image(imageData, 'profile-photo.jpg', 'profile');
-      console.log('MobileEntry - upload result:', { url, error });
       if (error || !url) {
         toast.error(error || 'Upload failed. Please try again.');
         setIsUploadingProfile(false);
         return;
       }
       setProfilePicUrl(url);
-      console.log('=== MobileEntry - profilePicUrl SET TO:', url);
       toast.success('Profile photo captured successfully.');
     } catch (err) {
       console.error('MobileEntry - upload error:', err);
@@ -108,15 +105,10 @@ export function MobileEntry({ onMobileSubmit, onLoginSubmit, checkMobileExists }
   };
 
   const handleProceedWithProfile = () => {
-    console.log('=== MobileEntry handleProceedWithProfile called ===');
-    console.log('mobileNumber:', mobileNumber);
-    console.log('profilePicUrl:', profilePicUrl);
     // Store in localStorage as backup
     if (profilePicUrl) {
       localStorage.setItem('registration_profile_pic', profilePicUrl);
-      console.log('=== Saved profile pic to localStorage:', profilePicUrl);
     }
-    console.log('Calling onMobileSubmit with:', mobileNumber, profilePicUrl);
     onMobileSubmit(mobileNumber, profilePicUrl || undefined);
   };
 

@@ -44,7 +44,6 @@ import {
 // ── Props ──────────────────────────────────────────────
 interface HelpdeskPageProps {
   employeeId: number;
-  employeeName: string;
 }
 
 // ── Constants ──────────────────────────────────────────
@@ -99,7 +98,7 @@ const PRIORITY_OPTIONS = [
 ];
 
 // ── Component ──────────────────────────────────────────
-export default function HelpdeskPage({ employeeId, employeeName }: HelpdeskPageProps) {
+export default function HelpdeskPage({ employeeId }: HelpdeskPageProps) {
   const [tickets, setTickets] = useState<HelpdeskTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -182,9 +181,7 @@ export default function HelpdeskPage({ employeeId, employeeName }: HelpdeskPageP
   };
 
   // ── Filtered tickets ──
-  const filteredTickets = activeFilter
-    ? tickets.filter((t) => t.status === activeFilter)
-    : tickets;
+  const filteredTickets = tickets;
 
   // ── Format date ──
   const formatDate = (dateStr?: string) => {

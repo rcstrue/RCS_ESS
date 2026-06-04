@@ -25,6 +25,7 @@ import {
   FileText,
   Clock,
   Eye,
+  EyeOff,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -82,6 +83,15 @@ function getInitials(name: string): string {
 function maskMobile(mobile: string): string {
   // Show full mobile number — no masking
   return mobile || '';
+}
+
+function maskSensitive(value: string): string {
+  if (!value) return '****';
+  if (value.length <= 4) return '****';
+  const first = value.slice(0, 2);
+  const last = value.slice(-2);
+  const middleLen = value.length - 4;
+  return first + '*'.repeat(middleLen) + last;
 }
 
 function formatDate(dateStr?: string): string {
@@ -539,7 +549,7 @@ export default function DirectoryPage({
                     {/* Contact */}
                     <ProfileSection title="Contact">
                       <ProfileRow icon={Phone} label="Mobile" value={emp.mobile_number ? maskMobile(emp.mobile_number) : undefined} />
-                      <ProfileRow icon={Phone} label="Alternate Mobile" value={emp.alternate_mobile ? maskMobile(emp.alternate_mobile) : undefined} />
+                      <SensitiveProfileRow icon={Phone} label="Alternate Mobile" value={emp.alternate_mobile} />
                       <ProfileRow icon={Mail} label="Email" value={emp.email} />
                       <ProfileRow icon={MapPin} label="Address" value={emp.address} />
                       <ProfileRow
@@ -569,17 +579,17 @@ export default function DirectoryPage({
 
                     {/* Government IDs — always show section */}
                     <ProfileSection title="Government IDs">
-                      <ProfileRow icon={IdCard} label="Aadhaar Number" value={emp.aadhaar_number} />
-                      <ProfileRow icon={Hash} label="UAN Number" value={emp.uan_number} />
-                      <ProfileRow icon={Hash} label="ESIC Number" value={emp.esic_number} />
+                      <SensitiveProfileRow icon={IdCard} label="Aadhaar Number" value={emp.aadhaar_number} />
+                      <SensitiveProfileRow icon={Hash} label="UAN Number" value={emp.uan_number} />
+                      <SensitiveProfileRow icon={Hash} label="ESIC Number" value={emp.esic_number} />
                     </ProfileSection>
 
                     {/* Bank Details — always show section */}
                     <ProfileSection title="Bank Details">
                       <ProfileRow icon={CreditCard} label="Bank Name" value={emp.bank_name} />
                       <ProfileRow icon={User} label="Account Holder" value={emp.account_holder_name} />
-                      <ProfileRow icon={CreditCard} label="Account Number" value={emp.account_number} />
-                      <ProfileRow icon={Hash} label="IFSC Code" value={emp.ifsc_code} />
+                      <SensitiveProfileRow icon={CreditCard} label="Account Number" value={emp.account_number} />
+                      <SensitiveProfileRow icon={Hash} label="IFSC Code" value={emp.ifsc_code} />
                     </ProfileSection>
 
                     {/* Emergency Contact — always show section */}
@@ -593,7 +603,7 @@ export default function DirectoryPage({
                       <ProfileRow icon={UsersRound} label="Nominee Name" value={emp.nominee_name} />
                       <ProfileRow icon={UsersRound} label="Relationship" value={emp.nominee_relationship} />
                       <ProfileRow icon={Calendar} label="Nominee DOB" value={emp.nominee_dob ? formatDate(emp.nominee_dob) : undefined} />
-                      <ProfileRow icon={Phone} label="Nominee Contact" value={emp.nominee_contact} />
+                      <SensitiveProfileRow icon={Phone} label="Nominee Contact" value={emp.nominee_contact} />
                     </ProfileSection>
 
                     {/* Documents — always show section */}
@@ -684,6 +694,51 @@ function ProfileRow({
           {value || '—'}
         </span>
       </div>
+    </div>
+  );
+}
+
+// ── Sensitive Profile Row (with eye toggle) ──────────
+function SensitiveProfileRow({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof User;
+  label: string;
+  value?: string;
+}) {
+  const [revealed, setRevealed] = useState(false);
+
+  if (!value) {
+    return (
+      <div className="flex items-start gap-3">
+        <Icon className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+        <div className="flex flex-col">
+          <span className="text-xs text-muted-foreground">{label}</span>
+          <span className="text-sm font-medium text-muted-foreground/50 italic">—</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-start gap-3">
+      <Icon className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+      <div className="flex flex-col flex-1 min-w-0">
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <span className="text-sm font-medium font-mono">
+          {revealed ? value : maskSensitive(value)}
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={() => setRevealed((r) => !r)}
+        className="mt-0.5 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
+        aria-label={revealed ? `Hide ${label}` : `Reveal ${label}`}
+      >
+        {revealed ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+      </button>
     </div>
   );
 }

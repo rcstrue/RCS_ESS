@@ -27,10 +27,6 @@ export function Step8Review({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
-  // Debug: Log profile pic data
-  console.log('Step8Review - documents:', data.documents);
-  console.log('Step8Review - profilePic:', data.documents.profilePic);
-
   // Check for missing/empty required fields
   const getMissingFields = () => {
     const missing: string[] = [];

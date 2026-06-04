@@ -14,7 +14,6 @@ import { Separator } from '@/components/ui/separator';
 import {
   LogOut,
   Clock,
-  MapPin,
   ChevronLeft,
   ChevronRight,
   CalendarDays,
@@ -363,7 +362,7 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
             <div className="text-center py-6 text-muted-foreground">
               <CalendarDays className="h-8 w-8 mx-auto mb-2 opacity-50" />
               <p className="text-sm">No attendance record for today</p>
-              <p className="text-xs mt-1">Tap "Check In" to mark your attendance</p>
+
             </div>
           )}
         </CardContent>

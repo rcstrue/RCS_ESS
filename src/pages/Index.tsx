@@ -37,7 +37,6 @@ const Index = () => {
 
     // IF localStorage has data → open form directly
     if (savedData && savedMobile) {
-      console.log('🔄 Found saved registration progress, restoring...');
       setRegistrationMobile(savedMobile);
       setView('registration');
     } else if (isLoggedIn) {
@@ -63,10 +62,6 @@ const Index = () => {
   }
 
   const handleMobileSubmit = (mobile: string, profilePicUrl?: string) => {
-    console.log('=== Index handleMobileSubmit ===');
-    console.log('mobile:', mobile);
-    console.log('profilePicUrl:', profilePicUrl);
-    
     // 📌 Save mobile to localStorage for persistence
     localStorage.setItem(REGISTRATION_MOBILE_KEY, mobile);
     

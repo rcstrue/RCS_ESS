@@ -221,7 +221,10 @@ export function RoleAccessManagement() {
     async function init() {
       setIsLoading(true);
       try {
-        const res = await fetch('/api/role-access');
+        const token = localStorage.getItem('admin_token');
+        const res = await fetch('/api/role-access', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
@@ -283,9 +286,13 @@ export function RoleAccessManagement() {
   const handleSave = useCallback(async () => {
     setIsSaving(true);
     try {
+      const token = localStorage.getItem('admin_token');
       const res = await fetch('/api/role-access', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ roles: roleAccess }),
       });
 

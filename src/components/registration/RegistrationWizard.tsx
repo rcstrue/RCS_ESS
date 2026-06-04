@@ -71,9 +71,6 @@ const createInitialData = (
   emp?: RegistrationWizardProps['existingEmployee'],
   profilePic?: string
 ): RegistrationData => {
-  console.log('createInitialData - profilePic param:', profilePic);
-  console.log('createInitialData - emp?.profile_pic_url:', emp?.profile_pic_url);
-  
   return {
   basicInfo: {
     mobileNumber: mobile || '',
@@ -131,21 +128,11 @@ export function RegistrationWizard({
   onComplete, 
   onBack: onBackToMobile 
 }: RegistrationWizardProps) {
-  // Debug: Log initial profile pic
-  console.log('=== RegistrationWizard render ===');
-  console.log('initialMobile:', initialMobile);
-  console.log('initialProfilePic prop:', initialProfilePic);
-  console.log('existingEmployeeId:', existingEmployeeId);
-  
   // Check localStorage for profile pic as backup
   const localStorageProfilePic = typeof window !== 'undefined' 
     ? localStorage.getItem('registration_profile_pic') 
     : null;
-  console.log('localStorage profilePic:', localStorageProfilePic);
-  
-  // Use localStorage value if prop is undefined
   const effectiveProfilePic = initialProfilePic || localStorageProfilePic || undefined;
-  console.log('effectiveProfilePic:', effectiveProfilePic);
   
   // Track if we've restored from localStorage to prevent overwriting
   const hasRestoredRef = useRef(false);
@@ -163,7 +150,6 @@ export function RegistrationWizard({
         completedSteps: savedCompleted ? JSON.parse(savedCompleted) : null,
       };
     } catch (e) {
-      console.error('Error loading saved form data:', e);
       return { data: null, step: null, completedSteps: null };
     }
   };
@@ -173,7 +159,6 @@ export function RegistrationWizard({
     // First check if we have saved progress
     const saved = loadSavedFormData();
     if (saved.step && saved.data) {
-      console.log('Found saved progress, restoring step:', saved.step);
       return saved.step;
     }
     
@@ -212,14 +197,11 @@ export function RegistrationWizard({
     // Try to restore from localStorage first
     const saved = loadSavedFormData();
     if (saved.data && !existingEmployee) {
-      console.log('=== Restoring registration data from localStorage ===');
       hasRestoredRef.current = true;
       return saved.data;
     }
     
     const initialData = createInitialData(initialMobile, existingEmployee, effectiveProfilePic);
-    console.log('=== Initial registration data created ===');
-    console.log('documents.profilePic:', initialData.documents.profilePic);
     return initialData;
   });
 
@@ -239,7 +221,6 @@ export function RegistrationWizard({
                     data.documents.aadhaarFront;
     
     if (hasData) {
-      console.log('=== Saving form data to localStorage ===');
       localStorage.setItem(REGISTRATION_DATA_KEY, JSON.stringify(data));
     }
   }, [data]);
@@ -259,7 +240,6 @@ export function RegistrationWizard({
     // Only update if we have a new profilePic and it's different from current
     setData(prev => {
       if (initialProfilePic && prev.documents.profilePic !== initialProfilePic) {
-        console.log('useEffect - updating profilePic from prop:', initialProfilePic);
         return {
           ...prev,
           documents: { ...prev.documents, profilePic: initialProfilePic },
@@ -366,9 +346,6 @@ export function RegistrationWizard({
         status: 'pending_hr_verification',
         profile_completion: 100,
       };
-
-      console.log('=== Submitting employee data ===');
-      console.log('profile_pic_url:', employeeData.profile_pic_url);
 
       if (existingEmployeeId) {
         // Update existing employee
