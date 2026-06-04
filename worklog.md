@@ -506,3 +506,22 @@ Stage Summary:
 - Committed: "Refactor Expense page: move month picker above tabs, show per-month advance details"
 - Pushed to GitHub: main branch (0d24f7b)
 - Build successful (Vite build, 2.75s)
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix dashboard pending approvals count showing stale/wrong data
+
+Work Log:
+- Found root cause in useDashboard.ts: fetchExpenses(empId, 'pending') was passing string 'pending' as 2nd arg
+- The function signature expects { status: 'pending' } object, so options?.status was undefined
+- No status filter was sent to the API, causing ALL expenses to be returned and counted as "pending"
+- Additionally, the dashboard was counting the manager's OWN expenses, not team pending expenses
+- Fix: Replaced fetchExpenses(empId, 'pending') with fetchPendingTeamExpenses()
+- This correctly calls the backend /ess/expenses?view=pending_team endpoint
+- Which only returns expenses with status='pending' from team members under the manager
+- Added fetchPendingTeamExpenses to imports
+
+Stage Summary:
+- Fixed useDashboard.ts: pendingExpenses now uses fetchPendingTeamExpenses()
+- Pushed to GitHub: main branch (c28f1a4)
+- Build successful
