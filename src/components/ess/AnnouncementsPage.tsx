@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { usePullToRefresh } from './hooks/usePullToRefresh';
 import { fetchAnnouncements, createAnnouncement } from '@/lib/ess-api';
 import type { Announcement } from '@/lib/ess-types';
 
@@ -107,6 +108,11 @@ export default function AnnouncementsPage({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // Pull-to-refresh
+  const pullRefresh = usePullToRefresh<HTMLDivElement>({
+    onRefresh: loadAnnouncements,
+  });
+
   // ── Form state ──
   const [formTitle, setFormTitle] = useState('');
   const [formContent, setFormContent] = useState('');
@@ -201,9 +207,21 @@ export default function AnnouncementsPage({
     });
   };
 
+  // Pull-to-refresh wrapper props
+  const pullRefreshProps = {
+    ref: pullRefresh.containerRef,
+    onTouchStart: pullRefresh.handleTouchStart,
+    onTouchMove: pullRefresh.handleTouchMove,
+    onTouchEnd: pullRefresh.handleTouchEnd,
+  };
+
   // ── Render ──
   return (
-    <div className="flex flex-col gap-4 pb-6">
+    <div {...pullRefreshProps} className="flex flex-col gap-4 pb-6" style={{ touchAction: 'pan-y' }}>
+      {/* Pull-to-refresh indicator */}
+      <div style={pullRefresh.pullIndicatorStyle} className="flex items-center justify-center">
+        <Loader2 className={cn("h-5 w-5 text-primary", (pullRefresh.isRefreshing || pullRefresh.pullDistance > 20) && "animate-spin")} />
+      </div>
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>

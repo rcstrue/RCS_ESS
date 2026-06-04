@@ -95,16 +95,17 @@ export function CameraCapture({
           });
         };
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error accessing camera:', error);
       setIsLoading(false);
 
       // Determine the type of error
-      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+      const err = error as { name?: string };
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         setPermissionState('denied');
-      } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
         setPermissionState('unavailable');
-      } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
         setPermissionState('unavailable');
       } else {
         setPermissionState('denied');

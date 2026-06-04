@@ -19,11 +19,16 @@ import { TasksPage } from './TasksPage';
 import HelpdeskPage from './HelpdeskPage';
 import AnnouncementsPage from './AnnouncementsPage';
 import DirectoryPage from './DirectoryPage';
+import NotificationsPage from './NotificationsPage';
+import HolidaysPage from './HolidaysPage';
+import EditProfilePage from './EditProfilePage';
+import RegularizationPage from './RegularizationPage';
 import { InstallBanner, PermissionDialog } from './InstallBanner';
 
 // Hook
 import { useDashboard } from './hooks/useDashboard';
 import { usePwaInstall } from './hooks/usePwaInstall';
+import { useNotifications } from './hooks/useNotifications';
 
 // Helpers
 import { getGreeting, getInitials, getScope, canApprove, canViewDirectory, detectRole } from './helpers';
@@ -32,7 +37,7 @@ import { getGreeting, getInitials, getScope, canApprove, canViewDirectory, detec
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 // lucide icons
-import { Building2, Loader2, UserPlus } from 'lucide-react';
+import { Building2, Loader2, UserPlus, Bell } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════
 // ESSApp — Slim orchestrator: auth, navigation, routing
@@ -130,6 +135,12 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
   // ── Navigation ──
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+
+  // ── Notifications (unconditionally before early returns) ──
+  const notifications = useNotifications(session?.employee?.id ?? 0);
+  const handleAddNotification = (title: string, message: string, type: 'leave' | 'expense' | 'task' | 'helpdesk') => {
+    notifications.addNotification(title, message, type);
+  };
 
   // ── PWA Install (must be before navigate which references pwa) ──
   const pwa = usePwaInstall();
@@ -245,6 +256,18 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
             <UserPlus className="w-4 h-4" />
             <span className="text-xs font-medium hidden sm:inline">New Registration</span>
           </button>
+          <button
+            onClick={() => navigate('notifications')}
+            className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-white border shadow-sm hover:bg-gray-50 transition-colors"
+            title="Notifications"
+          >
+            <Bell className="w-4 h-4 text-gray-600" />
+            {notifications.unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                {notifications.unreadCount > 9 ? '9+' : notifications.unreadCount}
+              </span>
+            )}
+          </button>
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-600">
             <Building2 className="w-4 h-4 text-white" />
           </div>
@@ -272,16 +295,39 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
               loading={dashboardLoading} onNavigate={navigate}
               onCheckIn={handleCheckIn} onCheckOut={handleCheckOut}
               checkInLoading={checkInLoading} checkOutLoading={checkOutLoading}
+              onAddNotification={handleAddNotification}
             />
           </div>
         )}
         {currentPage === 'directory' && canViewDirectory(role) && <DirectoryPage employeeId={emp.id} role={role} scope={scope} />}
-        {currentPage === 'expenses' && <ExpensesPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} />}
+        {currentPage === 'expenses' && <ExpensesPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} onAddNotification={handleAddNotification} />}
         {currentPage === 'attendance' && <AttendancePage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} />}
-        {currentPage === 'leaves' && <LeavesPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} />}
-        {currentPage === 'tasks' && <TasksPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} />}
+        {currentPage === 'leaves' && <LeavesPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} onAddNotification={handleAddNotification} />}
+        {currentPage === 'tasks' && <TasksPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} onAddNotification={handleAddNotification} />}
         {currentPage === 'announcements' && <AnnouncementsPage employeeId={emp.id} role={role} canPost={canPost} />}
-        {currentPage === 'helpdesk' && <HelpdeskPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} />}
+        {currentPage === 'helpdesk' && <HelpdeskPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} onAddNotification={handleAddNotification} />}
+        {currentPage === 'notifications' && (
+          <NotificationsPage
+            notifications={notifications.notifications}
+            unreadCount={notifications.unreadCount}
+            onMarkAsRead={notifications.markAsRead}
+            onMarkAllRead={notifications.markAllRead}
+            onClearAll={notifications.clearAll}
+          />
+        )}
+        {currentPage === 'holidays' && <HolidaysPage />}
+        {currentPage === 'edit-profile' && (
+          <EditProfilePage
+            employee={emp}
+            onSave={(updated) => {
+              const merged = { ...emp, ...updated };
+              saveSession({ ...activeSession!, employee: merged });
+              toast.success('Profile updated successfully');
+            }}
+            onBack={() => navigate('profile')}
+          />
+        )}
+        {currentPage === 'regularization' && <RegularizationPage employeeId={emp.id} />}
         {currentPage === 'profile' && <ProfileView employee={emp} role={role} onNavigate={navigate} />}
         {currentPage === 'settings' && <SettingsView employee={emp} onLogout={clearSession} />}
       </main>

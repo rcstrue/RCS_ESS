@@ -5,6 +5,7 @@ import {
 } from '@/lib/ess-api';
 import type { AttendanceRecord } from '@/lib/ess-types';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import { parseIST } from './helpers';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,13 +13,24 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   LogOut,
   Clock,
   ChevronLeft,
   ChevronRight,
   CalendarDays,
   Timer,
+  Loader2,
+  Download,
 } from 'lucide-react';
+import { usePullToRefresh } from './hooks/usePullToRefresh';
+import { useExportCSV } from './hooks/useExportCSV';
 
 // ─── Props ───────────────────────────────────────────────────────────
 interface AttendancePageProps {
@@ -140,6 +152,40 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
   const [checkOutLoading, setCheckOutLoading] = useState(false);
   const clockRef = useRef<ReturnType<typeof setInterval>>();
 
+  // Status filter
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  // Pull-to-refresh
+  const pullRefresh = usePullToRefresh<HTMLDivElement>({
+    onRefresh: loadAttendance,
+  });
+
+  // CSV Export
+  const { exportCSV } = useExportCSV();
+
+  const handleExportAttendance = () => {
+    const headers = ['Date', 'Check In', 'Check Out', 'Hours', 'Status', 'Location'];
+    const rows = records
+      .filter((r) => statusFilter === 'all' || r.status === statusFilter)
+      .map((r) => [
+        formatDate(r.date),
+        formatTime(r.check_in),
+        formatTime(r.check_out),
+        calculateHours(r.check_in, r.check_out),
+        STATUS_CONFIG[r.status]?.label ?? r.status,
+        r.latitude && r.longitude ? `${r.latitude}, ${r.longitude}` : '—',
+      ]);
+    exportCSV(
+      `Attendance_${getMonthLabel(navDate).replace(/\s+/g, '_')}.csv`,
+      headers,
+      rows
+    );
+    toast.success('Attendance exported successfully');
+  };
+
+  // Filtered records
+  const filteredRecords = statusFilter === 'all' ? records : records.filter((r) => r.status === statusFilter);
+
   // Track the active attendance ID even across month navigations
   // (user checks in one month, navigates to another, needs to check out)
   const activeAttendanceRef = useRef<number | null>(null);
@@ -252,9 +298,9 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
   const firstDay = getFirstDayOfWeek(year, month);
   const todayStr = todayDateString();
 
-  // Build a map of date -> status for quick lookup
+  // Build a map of date -> status for quick lookup (from filtered records)
   const statusMap = new Map<string, AttendanceRecord['status']>();
-  records.forEach((r) => statusMap.set(r.date, r.status));
+  filteredRecords.forEach((r) => statusMap.set(r.date, r.status));
 
   const isTodayMonth = year === new Date().getFullYear() && month === new Date().getMonth();
 
@@ -262,8 +308,45 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
   const canCheckOut = todayRecord?.status === 'checked_in' || (activeAttendanceRef.current && !todayRecord?.check_out);
 
   // ─── Render ──────────────────────────────────────────────────────
+  // Pull-to-refresh wrapper
+  const pullRefreshProps = {
+    ref: pullRefresh.containerRef,
+    onTouchStart: pullRefresh.handleTouchStart,
+    onTouchMove: pullRefresh.handleTouchMove,
+    onTouchEnd: pullRefresh.handleTouchEnd,
+  };
+
   return (
-    <div className="space-y-4 pb-6">
+    <div {...pullRefreshProps} className="space-y-4 pb-6" style={{ touchAction: 'pan-y' }}>
+      {/* Pull-to-refresh indicator */}
+      <div style={pullRefresh.pullIndicatorStyle} className="flex items-center justify-center">
+        <Loader2 className={cn("h-5 w-5 text-primary", (pullRefresh.isRefreshing || pullRefresh.pullDistance > 20) && "animate-spin")} />
+      </div>
+
+      {/* Export + Status filter row */}
+      <div className="flex items-center gap-2">
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="h-9 text-sm w-auto">
+            <SelectValue placeholder="All Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="present">Present</SelectItem>
+            <SelectItem value="absent">Absent</SelectItem>
+            <SelectItem value="late">Late</SelectItem>
+            <SelectItem value="half_day">Half Day</SelectItem>
+            <SelectItem value="leave">Leave</SelectItem>
+            <SelectItem value="holiday">Holiday</SelectItem>
+            <SelectItem value="checked_in">Checked In</SelectItem>
+            <SelectItem value="checked_out">Checked Out</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="flex-1" />
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportAttendance}>
+          <Download className="h-4 w-4" />
+          Export
+        </Button>
+      </div>
       {/* ── Check In / Out Action Card ─────────────────────────── */}
       <Card className="border-2">
         <CardContent className="p-4 sm:p-6">

@@ -30,6 +30,7 @@ import {
 
 import { cn } from '@/lib/utils';
 import { getFileUrl } from '@/lib/api/config';
+import { usePullToRefresh } from './hooks/usePullToRefresh';
 import {
   fetchEmployees,
   fetchEmployeeById,
@@ -140,6 +141,11 @@ export default function DirectoryPage({
   const [profileLoading, setProfileLoading] = useState(false);
   const [viewingDoc, setViewingDoc] = useState<{ url: string; title: string } | null>(null);
 
+  // Pull-to-refresh
+  const pullRefresh = usePullToRefresh<HTMLDivElement>({
+    onRefresh: loadEmployees,
+  });
+
   // ── Load filter options ──
   const loadFilters = useCallback(async () => {
     setFiltersLoading(true);
@@ -244,9 +250,21 @@ export default function DirectoryPage({
 
   const emp = selectedEmployee;
 
+  // Pull-to-refresh wrapper props
+  const pullRefreshProps = {
+    ref: pullRefresh.containerRef,
+    onTouchStart: pullRefresh.handleTouchStart,
+    onTouchMove: pullRefresh.handleTouchMove,
+    onTouchEnd: pullRefresh.handleTouchEnd,
+  };
+
   // ── Render ──
   return (
-    <div className="flex flex-col gap-4 pb-6">
+    <div {...pullRefreshProps} className="flex flex-col gap-4 pb-6" style={{ touchAction: 'pan-y' }}>
+      {/* Pull-to-refresh indicator */}
+      <div style={pullRefresh.pullIndicatorStyle} className="flex items-center justify-center">
+        <Loader2 className={cn("h-5 w-5 text-primary", (pullRefresh.isRefreshing || pullRefresh.pullDistance > 20) && "animate-spin")} />
+      </div>
       {/* Header */}
       <div>
         <h2 className="text-xl font-bold tracking-tight">Directory</h2>

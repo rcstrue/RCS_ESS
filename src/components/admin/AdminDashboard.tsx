@@ -4,10 +4,22 @@ import { useState } from 'react';
 import { adminLogout, AdminUser } from '@/lib/api/auth';
 import { EmployeeManagement } from './EmployeeManagement';
 import { SalaryUpload } from './SalaryUpload';
+import { UserManagement } from './UserManagement';
+import { DesignationManagement } from './DesignationManagement';
+import { ClientManagement } from './ClientManagement';
+import { RoleAccessManagement } from './RoleAccessManagement';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { LogOut, Users, FileSpreadsheet } from 'lucide-react';
+import {
+  LogOut,
+  Users,
+  FileSpreadsheet,
+  Shield,
+  Tag,
+  Building2,
+  ShieldCheck,
+} from 'lucide-react';
 
 interface AdminDashboardProps {
   user: AdminUser;
@@ -56,9 +68,25 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
               <Users className="w-4 h-4" />
               Employees
             </TabsTrigger>
+            <TabsTrigger value="users" className="gap-2">
+              <Shield className="w-4 h-4" />
+              Users
+            </TabsTrigger>
             <TabsTrigger value="salary-upload" className="gap-2">
               <FileSpreadsheet className="w-4 h-4" />
               Salary Upload
+            </TabsTrigger>
+            <TabsTrigger value="designations" className="gap-2">
+              <Tag className="w-4 h-4" />
+              Designations
+            </TabsTrigger>
+            <TabsTrigger value="clients-units" className="gap-2">
+              <Building2 className="w-4 h-4" />
+              Clients & Units
+            </TabsTrigger>
+            <TabsTrigger value="role-access" className="gap-2">
+              <ShieldCheck className="w-4 h-4" />
+              Role Access
             </TabsTrigger>
           </TabsList>
 
@@ -66,8 +94,24 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
             <EmployeeManagement userRole={user.role} />
           </TabsContent>
 
+          <TabsContent value="users">
+            <UserManagement />
+          </TabsContent>
+
           <TabsContent value="salary-upload">
             <SalaryUpload />
+          </TabsContent>
+
+          <TabsContent value="designations">
+            <DesignationManagement />
+          </TabsContent>
+
+          <TabsContent value="clients-units">
+            <ClientManagement />
+          </TabsContent>
+
+          <TabsContent value="role-access">
+            <RoleAccessManagement />
           </TabsContent>
         </Tabs>
       </main>

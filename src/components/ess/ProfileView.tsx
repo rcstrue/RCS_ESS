@@ -18,6 +18,7 @@ import {
   CalendarDays,
   Settings,
   Leaf,
+  Pencil,
 } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════
@@ -91,10 +92,16 @@ export default function ProfileView({
 
       {/* Action Buttons */}
       <div className="grid grid-cols-2 gap-3">
+        <Button variant="outline" className="w-full" onClick={() => onNavigate('edit-profile')}>
+          <Pencil className="w-4 h-4" />
+          Edit Profile
+        </Button>
         <Button variant="outline" className="w-full" onClick={() => onNavigate('settings')}>
           <Settings className="w-4 h-4" />
           Settings
         </Button>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
         <Button variant="outline" className="w-full" onClick={() => onNavigate('leaves')}>
           <Leaf className="w-4 h-4" />
           Leave Balance

@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { toast } from 'sonner';
 import type { Employee } from '@/lib/ess-types';
 import { ChangePinDialog } from './ChangePinDialog';
+import ConfirmDialog from './ConfirmDialog';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,7 @@ export default function SettingsView({
 }) {
   const [darkMode, setDarkMode] = useState(false);
   const [pinDialogOpen, setPinDialogOpen] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
   useEffect(() => {
     const isDark = document.documentElement.classList.contains('dark');
@@ -128,7 +129,7 @@ export default function SettingsView({
           <Button
             variant="destructive"
             className="w-full"
-            onClick={onLogout}
+            onClick={() => setLogoutConfirmOpen(true)}
           >
             <LogOut className="w-4 h-4" />
             Logout
@@ -138,6 +139,18 @@ export default function SettingsView({
           </p>
         </CardContent>
       </Card>
+
+      {/* Logout Confirmation */}
+      <ConfirmDialog
+        open={logoutConfirmOpen}
+        onOpenChange={setLogoutConfirmOpen}
+        title="Logout"
+        description="Are you sure you want to logout? You will need to login again to access the app."
+        confirmLabel="Yes, Logout"
+        cancelLabel="Cancel"
+        onConfirm={onLogout}
+        variant="destructive"
+      />
 
       {/* Change PIN Dialog */}
       <ChangePinDialog

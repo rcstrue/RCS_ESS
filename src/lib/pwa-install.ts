@@ -1,5 +1,10 @@
 // PWA Install Prompt Manager
-let deferredPrompt: any = null;
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+let deferredPrompt: BeforeInstallPromptEvent | null = null;
 
 export function isInstallable(): boolean {
   return deferredPrompt !== null;

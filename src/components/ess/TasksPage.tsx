@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import {
   Plus,
@@ -13,6 +13,10 @@ import {
   Users,
   CircleAlert,
   Filter,
+  Download,
+  Search,
+  MessageSquare,
+  Send,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -38,6 +42,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet';
+import {
   fetchTasks,
   createTask,
   updateTask,
@@ -49,6 +60,9 @@ import type {
   TASK_PRIORITIES as TaskPrioritiesType,
 } from '@/lib/ess-types';
 import { TASK_PRIORITIES } from '@/lib/ess-types';
+import { cn } from '@/lib/utils';
+import { usePullToRefresh } from './hooks/usePullToRefresh';
+import { useExportCSV } from './hooks/useExportCSV';
 
 interface TasksPageProps {
   employeeId: number;
@@ -84,10 +98,33 @@ const STATUS_LABEL: Record<string, string> = {
   completed: 'Completed',
 };
 
+// ── Comment types ──
+interface TaskComment {
+  id: string;
+  text: string;
+  timestamp: string;
+  authorName: string;
+}
+
+function getTaskComments(taskId: number): TaskComment[] {
+  try {
+    const raw = localStorage.getItem(`ess_task_comments_${taskId}`);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveTaskComment(taskId: number, comments: TaskComment[]) {
+  localStorage.setItem(`ess_task_comments_${taskId}`, JSON.stringify(comments));
+}
+
 export function TasksPage({ employeeId, employeeName, role, canApprove }: TasksPageProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [searchText, setSearchText] = useState('');
   const [isUpdatingId, setIsUpdatingId] = useState<number | null>(null);
 
   // Create dialog
@@ -102,6 +139,33 @@ export function TasksPage({ employeeId, employeeName, role, canApprove }: TasksP
   // Team employees (for assign-to dropdown)
   const [teamEmployees, setTeamEmployees] = useState<Employee[]>([]);
   const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
+
+  // Comments sheet
+  const [commentTaskId, setCommentTaskId] = useState<number | null>(null);
+  const [commentText, setCommentText] = useState('');
+  const [comments, setComments] = useState<TaskComment[]>([]);
+
+  // Pull-to-refresh
+  const pullRefresh = usePullToRefresh<HTMLDivElement>({
+    onRefresh: loadTasks,
+  });
+
+  // CSV Export
+  const { exportCSV } = useExportCSV();
+
+  const handleExportTasks = () => {
+    const headers = ['Title', 'Priority', 'Deadline', 'Status', 'Assigned By', 'Assigned To'];
+    const rows = filteredTasks.map((t) => [
+      t.title,
+      t.priority.charAt(0).toUpperCase() + t.priority.slice(1),
+      formatDate(t.deadline) || '',
+      STATUS_LABEL[t.status] || t.status,
+      t.assigned_by_name || '',
+      t.assigned_to_name || '',
+    ]);
+    exportCSV('Tasks.csv', headers, rows);
+    toast.success('Tasks exported successfully');
+  };
 
   // ── Fetch tasks ──
   const loadTasks = useCallback(async () => {
@@ -160,9 +224,17 @@ export function TasksPage({ employeeId, employeeName, role, canApprove }: TasksP
   }, [loadTasks, loadTeamEmployees]);
 
   // ── Filter tasks ──
-  const filteredTasks = statusFilter === 'all'
-    ? tasks
-    : tasks.filter((t) => t.status === statusFilter);
+  const filteredTasks = useMemo(() => {
+    let result = statusFilter === 'all' ? tasks : tasks.filter((t) => t.status === statusFilter);
+    if (priorityFilter !== 'all') {
+      result = result.filter((t) => t.priority === priorityFilter);
+    }
+    if (searchText.trim()) {
+      const q = searchText.toLowerCase();
+      result = result.filter((t) => t.title.toLowerCase().includes(q));
+    }
+    return result;
+  }, [tasks, statusFilter, priorityFilter, searchText]);
 
   // ── Create task ──
   const handleCreateTask = async () => {
@@ -224,6 +296,28 @@ export function TasksPage({ employeeId, employeeName, role, canApprove }: TasksP
     }
   };
 
+  // ── Comments ──
+  const openCommentSheet = (taskId: number) => {
+    setCommentTaskId(taskId);
+    setComments(getTaskComments(taskId));
+    setCommentText('');
+  };
+
+  const handleAddComment = () => {
+    if (!commentTaskId || !commentText.trim()) return;
+    const newComment: TaskComment = {
+      id: Date.now().toString(),
+      text: commentText.trim(),
+      timestamp: new Date().toISOString(),
+      authorName: employeeName,
+    };
+    const updated = [newComment, ...comments];
+    saveTaskComment(commentTaskId, updated);
+    setComments(updated);
+    setCommentText('');
+    toast.success('Comment added');
+  };
+
   // ── Helpers ──
   const isOverdue = (task: Task) =>
     task.deadline &&
@@ -239,14 +333,29 @@ export function TasksPage({ employeeId, employeeName, role, canApprove }: TasksP
     });
   };
 
+  // Pull-to-refresh wrapper props
+  const pullRefreshProps = {
+    ref: pullRefresh.containerRef,
+    onTouchStart: pullRefresh.handleTouchStart,
+    onTouchMove: pullRefresh.handleTouchMove,
+    onTouchEnd: pullRefresh.handleTouchEnd,
+  };
+
   // ── Render ──
 
   if (isLoading) {
     return <LoadingSkeleton />;
   }
 
+  const commentTask = commentTaskId ? tasks.find((t) => t.id === commentTaskId) : null;
+
   return (
-    <div className="flex flex-col gap-4 pb-4">
+    <div {...pullRefreshProps} className="flex flex-col gap-4 pb-4" style={{ touchAction: 'pan-y' }}>
+      {/* Pull-to-refresh indicator */}
+      <div style={pullRefresh.pullIndicatorStyle} className="flex items-center justify-center">
+        <Loader2 className={cn("h-5 w-5 text-primary", (pullRefresh.isRefreshing || pullRefresh.pullDistance > 20) && "animate-spin")} />
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -256,58 +365,92 @@ export function TasksPage({ employeeId, employeeName, role, canApprove }: TasksP
             {filteredTasks.length}
           </Badge>
         </div>
-        <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
-          <Plus className="h-4 w-4" />
-          <span className="hidden sm:inline">Create Task</span>
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportTasks}>
+            <Download className="h-4 w-4" />
+          </Button>
+          <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Create Task</span>
+          </Button>
+        </div>
       </div>
 
-      {/* Filter Chips */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-        {STATUS_FILTERS.map((filter) => {
-          const count =
-            filter.value === 'all'
-              ? tasks.length
-              : tasks.filter((t) => t.status === filter.value).length;
-          return (
-            <button
-              key={filter.value}
-              onClick={() => setStatusFilter(filter.value)}
-              className={`
-                inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium
-                transition-colors border shrink-0
-                ${
-                  statusFilter === filter.value
-                    ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                    : 'bg-background text-muted-foreground border-border hover:bg-accent hover:text-accent-foreground'
-                }
-              `}
-            >
-              {filter.icon}
-              {filter.label}
-              <span
-                className={`text-xs ${
-                  statusFilter === filter.value
-                    ? 'text-primary-foreground/70'
-                    : 'text-muted-foreground'
-                }`}
+      {/* Search bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search tasks..."
+          className="pl-9 h-9"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+        />
+      </div>
+
+      {/* Filter row: Status chips + Priority filter */}
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none flex-1">
+          {STATUS_FILTERS.map((filter) => {
+            const count =
+              filter.value === 'all'
+                ? tasks.length
+                : tasks.filter((t) => t.status === filter.value).length;
+            return (
+              <button
+                key={filter.value}
+                onClick={() => setStatusFilter(filter.value)}
+                className={`
+                  inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium
+                  transition-colors border shrink-0
+                  ${
+                    statusFilter === filter.value
+                      ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                      : 'bg-background text-muted-foreground border-border hover:bg-accent hover:text-accent-foreground'
+                  }
+                `}
               >
-                {count}
-              </span>
-            </button>
-          );
-        })}
+                {filter.icon}
+                {filter.label}
+                <span
+                  className={`text-xs ${
+                    statusFilter === filter.value
+                      ? 'text-primary-foreground/70'
+                      : 'text-muted-foreground'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Priority filter */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">Priority:</span>
+        <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+          <SelectTrigger className="h-8 text-xs w-auto">
+            <SelectValue placeholder="All" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="high">High</SelectItem>
+            <SelectItem value="medium">Medium</SelectItem>
+            <SelectItem value="low">Low</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Task List */}
       {filteredTasks.length === 0 ? (
         <EmptyState
           filter={statusFilter}
-          onClearFilter={() => setStatusFilter('all')}
+          onClearFilter={() => { setStatusFilter('all'); setPriorityFilter('all'); setSearchText(''); }}
           onCreateClick={() => setIsCreateDialogOpen(true)}
         />
       ) : (
-        <ScrollArea className="h-[calc(100vh-220px)]">
+        <ScrollArea className="h-[calc(100vh-320px)]">
           <div className="flex flex-col gap-3">
             {filteredTasks.map((task) => (
               <TaskCard
@@ -317,6 +460,7 @@ export function TasksPage({ employeeId, employeeName, role, canApprove }: TasksP
                 isOverdue={isOverdue(task)}
                 formatDate={formatDate}
                 onStatusChange={handleStatusChange}
+                onOpenComments={() => openCommentSheet(task.id)}
               />
             ))}
           </div>
@@ -339,7 +483,7 @@ export function TasksPage({ employeeId, employeeName, role, canApprove }: TasksP
             </DialogTitle>
             <DialogDescription>
               Add a new task for yourself
-              {canApprove ? ' or a team member' : ''}.
+              {canApprove ? ' or a team member' : '.'}.
             </DialogDescription>
           </DialogHeader>
 
@@ -424,7 +568,6 @@ export function TasksPage({ employeeId, employeeName, role, canApprove }: TasksP
                       <SelectValue placeholder="Select employee" />
                     </SelectTrigger>
                     <SelectContent>
-                      {/* Always include self first */}
                       <SelectItem value={String(employeeId)}>
                         {employeeName} (Self)
                       </SelectItem>
@@ -479,6 +622,60 @@ export function TasksPage({ employeeId, employeeName, role, canApprove }: TasksP
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Comments Sheet */}
+      <Sheet open={!!commentTaskId} onOpenChange={(open) => { if (!open) setCommentTaskId(null); }}>
+        <SheetContent className="flex flex-col sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle className="text-left">Task Comments</SheetTitle>
+            <SheetDescription className="text-left">
+              {commentTask?.title}
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="flex-1 overflow-y-auto py-4 space-y-3">
+            {comments.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <MessageSquare className="h-8 w-8 text-muted-foreground/50 mb-2" />
+                <p className="text-sm text-muted-foreground">No comments yet</p>
+                <p className="text-xs text-muted-foreground/70">Add the first comment for this task</p>
+              </div>
+            ) : (
+              comments.map((c) => (
+                <div key={c.id} className="rounded-lg border bg-muted/30 p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium">{c.authorName}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(c.timestamp).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true,
+                      })}
+                    </span>
+                  </div>
+                  <p className="text-sm text-foreground/90">{c.text}</p>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="border-t pt-3 pb-safe">
+            <div className="flex gap-2">
+              <Input
+                placeholder="Add a comment..."
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }}
+              />
+              <Button size="icon" disabled={!commentText.trim()} onClick={handleAddComment}>
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
@@ -493,10 +690,12 @@ interface TaskCardProps {
   isOverdue: boolean;
   formatDate: (d?: string) => string | null;
   onStatusChange: (task: Task, status: Task['status']) => void;
+  onOpenComments: () => void;
 }
 
-function TaskCard({ task, isUpdating, isOverdue: overdue, formatDate, onStatusChange }: TaskCardProps) {
+function TaskCard({ task, isUpdating, isOverdue: overdue, formatDate, onStatusChange, onOpenComments }: TaskCardProps) {
   const isCompleted = task.status === 'completed';
+  const commentCount = getTaskComments(task.id).length;
 
   return (
     <Card
@@ -560,45 +759,60 @@ function TaskCard({ task, isUpdating, isOverdue: overdue, formatDate, onStatusCh
         </div>
 
         {/* Action */}
-        <div className="flex justify-end">
-          {task.status === 'pending' && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={isUpdating}
-              onClick={() => onStatusChange(task, 'in_progress')}
-            >
-              {isUpdating ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4 mr-1" />
-              )}
-              Start
-            </Button>
-          )}
-          {task.status === 'in_progress' && (
-            <Button
-              size="sm"
-              disabled={isUpdating}
-              onClick={() => onStatusChange(task, 'completed')}
-            >
-              {isUpdating ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Check className="h-4 w-4 mr-1" />
-              )}
-              Complete
-            </Button>
-          )}
-          {task.status === 'completed' && (
-            <Badge
-              variant="outline"
-              className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 py-1 px-3"
-            >
-              <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-              Done
-            </Badge>
-          )}
+        <div className="flex items-center justify-between">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 text-muted-foreground hover:text-foreground relative"
+            onClick={onOpenComments}
+          >
+            <MessageSquare className="h-4 w-4" />
+            {commentCount > 0 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground px-1">
+                {commentCount}
+              </span>
+            )}
+          </Button>
+          <div className="flex items-center gap-2">
+            {task.status === 'pending' && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isUpdating}
+                onClick={() => onStatusChange(task, 'in_progress')}
+              >
+                {isUpdating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4 mr-1" />
+                )}
+                Start
+              </Button>
+            )}
+            {task.status === 'in_progress' && (
+              <Button
+                size="sm"
+                disabled={isUpdating}
+                onClick={() => onStatusChange(task, 'completed')}
+              >
+                {isUpdating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4 mr-1" />
+                )}
+                Complete
+              </Button>
+            )}
+            {task.status === 'completed' && (
+              <Badge
+                variant="outline"
+                className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 py-1 px-3"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                Done
+              </Badge>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

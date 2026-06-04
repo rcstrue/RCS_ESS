@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import {
   Plus,
   Loader2,
@@ -14,6 +15,8 @@ import {
   ChevronRight,
   Image as ImageIcon,
   Landmark,
+  Download,
+  Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -47,6 +50,8 @@ import {
 import { uploadFile, getFileUrl } from '@/lib/api/config';
 import type { Expense, AdvanceAllocation } from '@/lib/ess-types';
 import { EXPENSE_TYPES } from '@/lib/ess-types';
+import { usePullToRefresh } from './hooks/usePullToRefresh';
+import { useExportCSV } from './hooks/useExportCSV';
 
 interface ExpensesPageProps {
   employeeId: number;
@@ -178,6 +183,10 @@ export function ExpensesPage({
   // Expense types (dynamic from DB)
   const [expenseTypes, setExpenseTypes] = useState<string[]>([]);
 
+  // Search & filter
+  const [expenseSearchText, setExpenseSearchText] = useState('');
+  const [expenseStatusFilter, setExpenseStatusFilter] = useState('all');
+
   // Hardcoded type options: Expense and Advance to Employee
   const typeOptions = [
     { value: 'expense', label: 'Expense' },
@@ -203,6 +212,28 @@ export function ExpensesPage({
   const [billPreview, setBillPreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Pull-to-refresh
+  const pullRefresh = usePullToRefresh<HTMLDivElement>({
+    onRefresh: () => { loadMyExpenses(selectedMonth); loadAdvanceAllocations(); },
+  });
+
+  // CSV Export
+  const { exportCSV } = useExportCSV();
+
+  const handleExportExpenses = () => {
+    const headers = ['Date', 'Type', 'Category', 'Amount', 'Status', 'Description'];
+    const rows = displayedExpenses.map((e) => [
+      formatDate(e.expense_date),
+      TYPE_LABEL[e.type] || e.type,
+      CATEGORY_LABEL[e.category || ''] || e.category || '',
+      String(e.amount),
+      STATUS_LABEL[e.status] || e.status,
+      e.description || '',
+    ]);
+    exportCSV(`Expenses_${formatMonthYear(selectedMonth).replace(/\s+/g, '_')}.csv`, headers, rows);
+    toast.success('Expenses exported successfully');
+  };
 
   // ── Load advance allocations ──
   const loadAdvanceAllocations = useCallback(async () => {
@@ -268,6 +299,24 @@ export function ExpensesPage({
       return e.expense_date.startsWith(selectedMonth);
     });
   }, [myExpenses, selectedMonth]);
+
+  // ── Search + status filtered expenses for display ──
+  const displayedExpenses = useMemo(() => {
+    let result = monthExpenses;
+    if (expenseStatusFilter !== 'all') {
+      result = result.filter((e) => e.status === expenseStatusFilter);
+    }
+    if (expenseSearchText.trim()) {
+      const q = expenseSearchText.toLowerCase();
+      result = result.filter(
+        (e) =>
+          (e.type || '').toLowerCase().includes(q) ||
+          (CATEGORY_LABEL[e.category || ''] || '').toLowerCase().includes(q) ||
+          (e.description || '').toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [monthExpenses, expenseStatusFilter, expenseSearchText]);
 
   // ── Month-filtered advance allocations ──
   const [selYear, selMonth] = useMemo(() => {
@@ -399,9 +448,22 @@ export function ExpensesPage({
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // Pull-to-refresh wrapper props
+  const pullRefreshProps = {
+    ref: pullRefresh.containerRef,
+    onTouchStart: pullRefresh.handleTouchStart,
+    onTouchMove: pullRefresh.handleTouchMove,
+    onTouchEnd: pullRefresh.handleTouchEnd,
+  };
+
   // ── Render ──
   return (
-    <div className="flex flex-col gap-4 pb-4">
+    <div {...pullRefreshProps} className="flex flex-col gap-4 pb-4" style={{ touchAction: 'pan-y' }}>
+      {/* Pull-to-refresh indicator */}
+      <div style={pullRefresh.pullIndicatorStyle} className="flex items-center justify-center">
+        <Loader2 className={cn("h-5 w-5 text-primary", (pullRefresh.isRefreshing || pullRefresh.pullDistance > 20) && "animate-spin")} />
+      </div>
+
       {/* Header */}
       <div className="flex items-center gap-2">
         <Receipt className="h-5 w-5 text-primary" />
@@ -446,7 +508,7 @@ export function ExpensesPage({
             My Expenses
             {monthSummary.totalPending > 0 && (
               <Badge variant="secondary" className="ml-2 text-xs px-1.5">
-                {monthSummary.totalPending > 0 ? monthExpenses.filter((e) => e.status === 'pending').length : 0}
+                {monthExpenses.filter((e) => e.status === 'pending').length}
               </Badge>
             )}
           </TabsTrigger>
@@ -620,8 +682,36 @@ export function ExpensesPage({
             </CardContent>
           </Card>
 
+          {/* Search + filter + export */}
+          <div className="flex items-center gap-2 mt-3 mb-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search expenses..."
+                className="pl-9 h-9"
+                value={expenseSearchText}
+                onChange={(e) => setExpenseSearchText(e.target.value)}
+              />
+            </div>
+            <Select value={expenseStatusFilter} onValueChange={setExpenseStatusFilter}>
+              <SelectTrigger className="h-9 w-auto">
+                <SelectValue placeholder="All Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+                <SelectItem value="reimbursed">Reimbursed</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={handleExportExpenses}>
+              <Download className="h-4 w-4" />
+            </Button>
+          </div>
+
           {/* Submit button */}
-          <div className="flex justify-end mt-3 mb-3">
+          <div className="flex justify-end mb-3">
             <Button size="sm" onClick={() => setIsSubmitDialogOpen(true)}>
               <Plus className="h-4 w-4" />
               <span className="hidden sm:inline">Submit Expense</span>
@@ -631,17 +721,17 @@ export function ExpensesPage({
           {/* Expenses list */}
           {isLoadingMy ? (
             <LoadingSkeleton />
-          ) : monthExpenses.length === 0 ? (
+          ) : displayedExpenses.length === 0 ? (
             <EmptyState
-              title="No expenses this month"
-              description="Submit your first expense claim for this month."
-              onAction={() => setIsSubmitDialogOpen(true)}
+              title={monthExpenses.length === 0 ? "No expenses this month" : "No matching expenses"}
+              description={monthExpenses.length === 0 ? "Submit your first expense claim for this month." : "Try adjusting your search or filter."}
+              onAction={monthExpenses.length === 0 ? () => setIsSubmitDialogOpen(true) : undefined}
               actionLabel="Submit Expense"
             />
           ) : (
-            <ScrollArea className="h-[calc(100vh-480px)]">
+            <ScrollArea className="h-[calc(100vh-520px)]">
               <div className="flex flex-col gap-3">
-                {monthExpenses.map((expense) => (
+                {displayedExpenses.map((expense) => (
                   <ExpenseCard key={expense.id} expense={expense} />
                 ))}
               </div>

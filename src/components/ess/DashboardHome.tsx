@@ -54,6 +54,7 @@ export default function DashboardHome({
   onCheckOut,
   checkInLoading,
   checkOutLoading,
+  onAddNotification,
 }: {
   employee: Employee;
   role: EmployeeRole;
@@ -64,6 +65,7 @@ export default function DashboardHome({
   onCheckOut: () => Promise<void>;
   checkInLoading: boolean;
   checkOutLoading: boolean;
+  onAddNotification?: (title: string, message: string, type: 'leave' | 'expense' | 'task' | 'helpdesk') => void;
 }) {
   // Live clock
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -76,6 +78,29 @@ export default function DashboardHome({
   const att = dashboardData?.todayAttendance;
   const hasApprovals = canApprove(role) && dashboardData
     && (dashboardData.pendingLeaves + dashboardData.pendingExpenses) > 0;
+
+  // Fire notification on mount if pending approvals exist
+  useEffect(() => {
+    if (hasApprovals && onAddNotification && dashboardData) {
+      const hash = `approvals-${dashboardData.pendingLeaves}-${dashboardData.pendingExpenses}-${new Date().toDateString()}`;
+      // Check if a similar notification already exists today
+      try {
+        const stored = localStorage.getItem(`ess_notifications_${employee.id}`);
+        if (stored) {
+          const existing = JSON.parse(stored) as Array<{ title: string; timestamp: string; read: boolean }>;
+          const todayNotif = existing.find(
+            (n) => n.title === 'Pending Approvals' && n.timestamp.startsWith(new Date().toISOString().slice(0, 10))
+          );
+          if (todayNotif) return; // Already notified today
+        }
+      } catch { /* ignore */ }
+      onAddNotification(
+        'Pending Approvals',
+        `${dashboardData.pendingLeaves} leave request(s) and ${dashboardData.pendingExpenses} expense claim(s) pending your approval.`,
+        'leave'
+      );
+    }
+  }, []);
 
   const quickActions = [
     { key: 'attendance', label: 'History', icon: CalendarDays, color: 'text-emerald-600', bg: 'bg-emerald-50' },

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   fetchLeaveBalance,
   fetchLeaves,
@@ -9,6 +9,10 @@ import {
 import type { LeaveRequest, LeaveBalance } from '@/lib/ess-types';
 import { LEAVE_TYPES } from '@/lib/ess-types';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import { usePullToRefresh } from './hooks/usePullToRefresh';
+import { useExportCSV } from './hooks/useExportCSV';
+import ConfirmDialog from './ConfirmDialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -43,7 +47,11 @@ import {
   X,
   Users,
   AlertTriangle,
+  Download,
+  Loader2,
+  Search,
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 // ─── Props ───────────────────────────────────────────────────────────
 interface LeavesPageProps {
@@ -120,6 +128,54 @@ export default function LeavesPage({
 
   // Active tab
   const [activeTab, setActiveTab] = useState('balance');
+
+  // Search & filter for My Requests
+  const [leaveTypeFilter, setLeaveTypeFilter] = useState('all');
+  const [leaveSearchText, setLeaveSearchText] = useState('');
+
+  // Confirmation dialogs
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [cancelTargetId, setCancelTargetId] = useState<number | null>(null);
+
+  // Pull-to-refresh
+  const pullRefresh = usePullToRefresh<HTMLDivElement>({
+    onRefresh: refreshAll,
+  });
+
+  // CSV Export
+  const { exportCSV } = useExportCSV();
+
+  const handleExportLeaves = () => {
+    const headers = ['Type', 'Start Date', 'End Date', 'Days', 'Status', 'Reason'];
+    const rows = filteredMyRequests.map((r) => [
+      getLeaveTypeLabel(r.type),
+      formatDate(r.start_date),
+      formatDate(r.end_date),
+      String(r.days),
+      LEAVE_STATUS_COLORS[r.status]?.label ?? r.status,
+      r.reason || '',
+    ]);
+    exportCSV('Leave_Requests.csv', headers, rows);
+    toast.success('Leave requests exported successfully');
+  };
+
+  // Filtered my requests
+  const filteredMyRequests = useMemo(() => {
+    let filtered = myRequests;
+    if (leaveTypeFilter !== 'all') {
+      filtered = filtered.filter((r) => r.type === leaveTypeFilter);
+    }
+    if (leaveSearchText.trim()) {
+      const q = leaveSearchText.toLowerCase();
+      filtered = filtered.filter(
+        (r) =>
+          r.type.toLowerCase().includes(q) ||
+          getLeaveTypeLabel(r.type).toLowerCase().includes(q) ||
+          r.reason?.toLowerCase().includes(q)
+      );
+    }
+    return filtered;
+  }, [myRequests, leaveTypeFilter, leaveSearchText]);
 
   // Apply leave dialog
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
@@ -279,15 +335,23 @@ export default function LeavesPage({
     }
   };
 
-  // ─── Cancel own request ──────────────────────────────────────
+  // ─── Cancel own request (with confirmation) ──────────────────────
   const handleCancelLeave = async (id: number) => {
+    setCancelTargetId(id);
+    setCancelConfirmOpen(true);
+  };
+
+  const confirmCancelLeave = async () => {
+    if (!cancelTargetId) return;
     try {
-      const { error: cancelError } = await approveLeave(id, 'cancelled', employeeId);
+      const { error: cancelError } = await approveLeave(cancelTargetId, 'cancelled', employeeId);
       if (cancelError) {
         toast.error(cancelError);
         return;
       }
       toast.success('Leave request cancelled');
+      setCancelConfirmOpen(false);
+      setCancelTargetId(null);
       refreshAll();
     } catch {
       toast.error('Failed to cancel leave request');
@@ -347,9 +411,21 @@ export default function LeavesPage({
       ? calculateDays(applyForm.start_date, applyForm.end_date)
       : 0;
 
+  // Pull-to-refresh wrapper props
+  const pullRefreshProps = {
+    ref: pullRefresh.containerRef,
+    onTouchStart: pullRefresh.handleTouchStart,
+    onTouchMove: pullRefresh.handleTouchMove,
+    onTouchEnd: pullRefresh.handleTouchEnd,
+  };
+
   // ─── Render ──────────────────────────────────────────────────
   return (
-    <div className="space-y-4 pb-6">
+    <div {...pullRefreshProps} className="space-y-4 pb-6" style={{ touchAction: 'pan-y' }}>
+      {/* Pull-to-refresh indicator */}
+      <div style={pullRefresh.pullIndicatorStyle} className="flex items-center justify-center">
+        <Loader2 className={cn("h-5 w-5 text-primary", (pullRefresh.isRefreshing || pullRefresh.pullDistance > 20) && "animate-spin")} />
+      </div>
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="w-full flex">
           <TabsTrigger value="balance" className="gap-1.5 text-xs sm:text-sm">
@@ -440,6 +516,35 @@ export default function LeavesPage({
 
         {/* ═══════════ MY REQUESTS TAB ═══════════ */}
         <TabsContent value="requests" className="mt-4">
+          {/* Search + filter + export */}
+          <div className="flex items-center gap-2 mb-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search leaves..."
+                className="pl-9 h-9"
+                value={leaveSearchText}
+                onChange={(e) => setLeaveSearchText(e.target.value)}
+              />
+            </div>
+            <Select value={leaveTypeFilter} onValueChange={setLeaveTypeFilter}>
+              <SelectTrigger className="h-9 w-auto">
+                <SelectValue placeholder="All Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                {LEAVE_TYPES.map((lt) => (
+                  <SelectItem key={lt.value} value={lt.value}>
+                    {lt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={handleExportLeaves}>
+              <Download className="h-4 w-4" />
+            </Button>
+          </div>
+
           {/* Apply button */}
           <div className="flex justify-end mb-3">
             <Button
@@ -466,9 +571,17 @@ export default function LeavesPage({
                 <p className="text-xs mt-1">Tap "Apply Leave" to submit a new request</p>
               </CardContent>
             </Card>
+          ) : filteredMyRequests.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <CalendarDays className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                <p className="text-sm">No matching leave requests</p>
+                <p className="text-xs mt-1">Try adjusting your search or filter</p>
+              </CardContent>
+            </Card>
           ) : (
             <div className="space-y-3">
-              {myRequests.map((req) => {
+              {filteredMyRequests.map((req) => {
                 const statusCfg = LEAVE_STATUS_COLORS[req.status] ?? LEAVE_STATUS_COLORS.pending;
                 const typeColors = LEAVE_TYPE_COLORS[req.type] ?? LEAVE_TYPE_COLORS.LWP;
 
@@ -744,6 +857,18 @@ export default function LeavesPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ═══════════ CANCEL CONFIRM DIALOG ═══════════ */}
+      <ConfirmDialog
+        open={cancelConfirmOpen}
+        onOpenChange={setCancelConfirmOpen}
+        title="Cancel Leave Request"
+        description="Are you sure you want to cancel this leave request? This action cannot be undone."
+        confirmLabel="Yes, Cancel"
+        cancelLabel="Go Back"
+        onConfirm={confirmCancelLeave}
+        variant="destructive"
+      />
 
       {/* ═══════════ REJECT DIALOG ═══════════ */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>

@@ -1495,7 +1495,7 @@ export default function ExpensesPage({
   const loadExpenses = useCallback(async () => {
     setIsLoading(true);
     try {
-      let params: Record<string, string | number | undefined> = {
+      const params: Record<string, string | number | undefined> = {
         action: "list",
       };
 
@@ -1562,7 +1562,7 @@ export default function ExpensesPage({
   const loadDashboard = useCallback(async () => {
     setIsDashboardLoading(true);
     try {
-      let params: Record<string, string | number | undefined> = {
+      const params: Record<string, string | number | undefined> = {
         action: "dashboard",
       };
 

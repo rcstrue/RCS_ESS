@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import {
   Clock,
@@ -9,12 +9,17 @@ import {
   TicketCheck,
   Inbox,
   AlertCircle,
+  Search,
+  Send,
+  MessageSquare,
+  X,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { fetchHelpdeskTickets, createHelpdeskTicket } from '@/lib/ess-api';
 import type { HelpdeskTicket } from '@/lib/ess-types';
 import { HELPDESK_CATEGORIES, HELPDESK_STATUSES } from '@/lib/ess-types';
+import { usePullToRefresh } from './hooks/usePullToRefresh';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -40,10 +45,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet';
 
 // ── Props ──────────────────────────────────────────────
 interface HelpdeskPageProps {
   employeeId: number;
+  employeeName?: string;
 }
 
 // ── Constants ──────────────────────────────────────────
@@ -97,20 +110,57 @@ const PRIORITY_OPTIONS = [
   { value: 'low', label: 'Low' },
 ];
 
+// ── Reply types ──
+interface HelpdeskReply {
+  id: string;
+  message: string;
+  timestamp: string;
+  senderType: 'Employee' | 'Admin' | 'System';
+  senderName?: string;
+}
+
+function getHelpdeskReplies(ticketId: number): HelpdeskReply[] {
+  try {
+    const raw = localStorage.getItem(`ess_helpdesk_replies_${ticketId}`);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHelpdeskReply(ticketId: number, replies: HelpdeskReply[]) {
+  localStorage.setItem(`ess_helpdesk_replies_${ticketId}`, JSON.stringify(replies));
+}
+
+function getReplyCount(ticketId: number): number {
+  return getHelpdeskReplies(ticketId).length;
+}
+
 // ── Component ──────────────────────────────────────────
-export default function HelpdeskPage({ employeeId }: HelpdeskPageProps) {
+export default function HelpdeskPage({ employeeId, employeeName = 'Employee' }: HelpdeskPageProps) {
   const [tickets, setTickets] = useState<HelpdeskTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [searchText, setSearchText] = useState('');
+
+  // ── Reply sheet state ──
+  const [selectedTicket, setSelectedTicket] = useState<HelpdeskTicket | null>(null);
+  const [replies, setReplies] = useState<HelpdeskReply[]>([]);
+  const [replyText, setReplyText] = useState('');
 
   // ── Form state ──
   const [formCategory, setFormCategory] = useState('');
   const [formSubject, setFormSubject] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formPriority, setFormPriority] = useState('medium');
+
+  // Pull-to-refresh
+  const pullRefresh = usePullToRefresh<HTMLDivElement>({
+    onRefresh: loadTickets,
+  });
 
   // ── Fetch tickets ──
   const loadTickets = useCallback(async () => {
@@ -135,6 +185,42 @@ export default function HelpdeskPage({ employeeId }: HelpdeskPageProps) {
   useEffect(() => {
     loadTickets();
   }, [loadTickets]);
+
+  // ── Filtered tickets (client-side search) ──
+  const filteredTickets = useMemo(() => {
+    if (!searchText.trim()) return tickets;
+    const q = searchText.toLowerCase();
+    return tickets.filter(
+      (t) =>
+        t.subject.toLowerCase().includes(q) ||
+        t.category.toLowerCase().includes(q) ||
+        t.description?.toLowerCase().includes(q)
+    );
+  }, [tickets, searchText]);
+
+  // ── Open reply sheet ──
+  const openReplySheet = (ticket: HelpdeskTicket) => {
+    setSelectedTicket(ticket);
+    setReplies(getHelpdeskReplies(ticket.id));
+    setReplyText('');
+  };
+
+  // ── Add reply ──
+  const handleAddReply = () => {
+    if (!selectedTicket || !replyText.trim()) return;
+    const newReply: HelpdeskReply = {
+      id: Date.now().toString(),
+      message: replyText.trim(),
+      timestamp: new Date().toISOString(),
+      senderType: 'Employee',
+      senderName: employeeName,
+    };
+    const updated = [...replies, newReply];
+    saveHelpdeskReplies(selectedTicket.id, updated);
+    setReplies(updated);
+    setReplyText('');
+    toast.success('Reply added');
+  };
 
   // ── Reset form ──
   const resetForm = () => {
@@ -180,9 +266,6 @@ export default function HelpdeskPage({ employeeId }: HelpdeskPageProps) {
     }
   };
 
-  // ── Filtered tickets ──
-  const filteredTickets = tickets;
-
   // ── Format date ──
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '';
@@ -194,9 +277,34 @@ export default function HelpdeskPage({ employeeId }: HelpdeskPageProps) {
     });
   };
 
+  const formatDateTime = (dateStr?: string) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  };
+
+  // Pull-to-refresh wrapper props
+  const pullRefreshProps = {
+    ref: pullRefresh.containerRef,
+    onTouchStart: pullRefresh.handleTouchStart,
+    onTouchMove: pullRefresh.handleTouchMove,
+    onTouchEnd: pullRefresh.handleTouchEnd,
+  };
+
   // ── Render ──
   return (
-    <div className="flex flex-col gap-4 pb-6">
+    <div {...pullRefreshProps} className="flex flex-col gap-4 pb-6" style={{ touchAction: 'pan-y' }}>
+      {/* Pull-to-refresh indicator */}
+      <div style={pullRefresh.pullIndicatorStyle} className="flex items-center justify-center">
+        <Loader2 className={cn("h-5 w-5 text-primary", (pullRefresh.isRefreshing || pullRefresh.pullDistance > 20) && "animate-spin")} />
+      </div>
+
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -299,6 +407,25 @@ export default function HelpdeskPage({ employeeId }: HelpdeskPageProps) {
         </Dialog>
       </div>
 
+      {/* Search bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search tickets by subject, category..."
+          className="pl-9 h-9"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+        />
+        {searchText && (
+          <button
+            onClick={() => setSearchText('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
       {/* Filter Chips */}
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
         {FILTER_CHIPS.map((chip) => (
@@ -350,14 +477,18 @@ export default function HelpdeskPage({ employeeId }: HelpdeskPageProps) {
         <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed p-10 text-center">
           <Inbox className="h-10 w-10 text-muted-foreground/50" />
           <div>
-            <p className="font-medium text-muted-foreground">No tickets yet</p>
+            <p className="font-medium text-muted-foreground">
+              {searchText ? 'No tickets match your search' : 'No tickets yet'}
+            </p>
             <p className="text-sm text-muted-foreground/70">
-              {activeFilter
-                ? `No ${STATUS_LABELS[activeFilter]?.toLowerCase()} tickets found`
-                : 'Submit a new ticket to get help from our support team'}
+              {searchText
+                ? 'Try adjusting your search terms'
+                : activeFilter
+                  ? `No ${STATUS_LABELS[activeFilter]?.toLowerCase()} tickets found`
+                  : 'Submit a new ticket to get help from our support team'}
             </p>
           </div>
-          {!activeFilter && (
+          {!activeFilter && !searchText && (
             <Button
               variant="outline"
               size="sm"
@@ -373,11 +504,124 @@ export default function HelpdeskPage({ employeeId }: HelpdeskPageProps) {
         <ScrollArea className="h-auto">
           <div className="flex flex-col gap-3">
             {filteredTickets.map((ticket) => (
-              <TicketCard key={ticket.id} ticket={ticket} formatDate={formatDate} />
+              <TicketCard
+                key={ticket.id}
+                ticket={ticket}
+                formatDate={formatDate}
+                replyCount={getReplyCount(ticket.id)}
+                onTap={() => openReplySheet(ticket)}
+              />
             ))}
           </div>
         </ScrollArea>
       )}
+
+      {/* Reply Thread Sheet */}
+      <Sheet open={!!selectedTicket} onOpenChange={(open) => { if (!open) setSelectedTicket(null); }}>
+        <SheetContent className="flex flex-col sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle className="text-left">Ticket Details</SheetTitle>
+            <SheetDescription className="text-left truncate">
+              {selectedTicket?.subject}
+            </SheetDescription>
+          </SheetHeader>
+
+          {selectedTicket && (
+            <div className="flex-1 overflow-y-auto py-4 space-y-4">
+              {/* Ticket info */}
+              <div className="rounded-lg border p-4 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className={cn('text-xs', CATEGORY_COLORS[selectedTicket.category] || '')}>
+                    {selectedTicket.category}
+                  </Badge>
+                  <Badge variant="outline" className={cn('text-xs', PRIORITY_COLORS[selectedTicket.priority] || '')}>
+                    {selectedTicket.priority}
+                  </Badge>
+                  <Badge variant="outline" className={cn('gap-1 text-xs', STATUS_COLORS[selectedTicket.status] || '')}>
+                    {STATUS_LABELS[selectedTicket.status] || selectedTicket.status}
+                  </Badge>
+                </div>
+                {selectedTicket.description && (
+                  <p className="text-sm text-muted-foreground">{selectedTicket.description}</p>
+                )}
+                <p className="text-xs text-muted-foreground">Created: {formatDate(selectedTicket.created_at)}</p>
+              </div>
+
+              <Separator />
+
+              {/* Conversation thread */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                  Conversation ({replies.length})
+                </h4>
+
+                {replies.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <MessageSquare className="h-8 w-8 text-muted-foreground/50 mb-2" />
+                    <p className="text-sm text-muted-foreground">No replies yet</p>
+                  </div>
+                ) : (
+                  replies.map((reply) => (
+                    <div
+                      key={reply.id}
+                      className={cn(
+                        'rounded-lg border p-3',
+                        reply.senderType === 'System'
+                          ? 'bg-muted/50 border-dashed'
+                          : reply.senderType === 'Admin'
+                            ? 'bg-sky-50 border-sky-100'
+                            : 'bg-emerald-50 border-emerald-100'
+                      )}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              'text-[10px] px-1.5',
+                              reply.senderType === 'System'
+                                ? 'bg-slate-100 text-slate-600 border-slate-200'
+                                : reply.senderType === 'Admin'
+                                  ? 'bg-sky-100 text-sky-700 border-sky-200'
+                                  : 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                            )}
+                          >
+                            {reply.senderType}
+                          </Badge>
+                          {reply.senderName && (
+                            <span className="text-xs font-medium">{reply.senderName}</span>
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDateTime(reply.timestamp)}
+                        </span>
+                      </div>
+                      <p className="text-sm">{reply.message}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Add Reply */}
+          {(selectedTicket?.status === 'open' || selectedTicket?.status === 'in_progress') && (
+            <div className="border-t pt-3 pb-safe">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Type your reply..."
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddReply(); } }}
+                />
+                <Button size="icon" disabled={!replyText.trim()} onClick={handleAddReply}>
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
@@ -392,15 +636,22 @@ function StatusIconChip({ status, className }: { status: string; className?: str
 function TicketCard({
   ticket,
   formatDate,
+  replyCount,
+  onTap,
 }: {
   ticket: HelpdeskTicket;
   formatDate: (d?: string) => string;
+  replyCount: number;
+  onTap: () => void;
 }) {
   const StatusIcon = STATUS_ICONS[ticket.status] || CircleDot;
   const statusLabel = STATUS_LABELS[ticket.status] || ticket.status;
 
   return (
-    <div className="rounded-lg border bg-card p-4 transition-colors hover:bg-accent/30">
+    <div
+      className="rounded-lg border bg-card p-4 transition-colors hover:bg-accent/30 cursor-pointer"
+      onClick={onTap}
+    >
       {/* Top row: category + priority */}
       <div className="flex items-center justify-between gap-2 mb-2">
         <Badge
@@ -409,12 +660,19 @@ function TicketCard({
         >
           {ticket.category}
         </Badge>
-        <Badge
-          variant="outline"
-          className={cn('text-xs', PRIORITY_COLORS[ticket.priority] || '')}
-        >
-          {ticket.priority}
-        </Badge>
+        <div className="flex items-center gap-1.5">
+          {replyCount > 0 && (
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground px-1">
+              {replyCount}
+            </span>
+          )}
+          <Badge
+            variant="outline"
+            className={cn('text-xs', PRIORITY_COLORS[ticket.priority] || '')}
+          >
+            {ticket.priority}
+          </Badge>
+        </div>
       </div>
 
       {/* Subject */}
@@ -438,9 +696,12 @@ function TicketCard({
           <StatusIcon className="h-3 w-3" />
           {statusLabel}
         </Badge>
-        <span className="text-xs text-muted-foreground">
-          {formatDate(ticket.created_at)}
-        </span>
+        <div className="flex items-center gap-2">
+          <MessageSquare className="h-3 w-3 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">
+            {formatDate(ticket.created_at)}
+          </span>
+        </div>
       </div>
     </div>
   );
