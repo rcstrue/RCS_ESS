@@ -481,3 +481,28 @@ Stage Summary:
 - Backend stores records with transaction safety and upload logging
 - Zero lint errors in new files
 - Deploy command needed on server: cd ~/RCS_ESS && git pull origin main && bun install && bun run build && rsync -av dist/ ~/domains/join.rcsfacility.com/public_html/ && rsync -av --exclude='config.php' api/ess/ ~/domains/join.rcsfacility.com/public_html/api/ess/
+---
+Task ID: 1
+Agent: Main Agent
+Task: Restructure Expense page - move Month Picker above tabs, show per-month advance details
+
+Work Log:
+- Read current ExpensesPage.tsx, expenses.php, and ess-api.ts to understand existing code structure
+- Moved the Month Picker (◀ Month Year ▶) from inside the "My Expenses" tab to above both tabs, shared by both
+- Changed month data loading to trigger on month change regardless of active tab (both tabs need month_summary)
+- Added client-side filtering of advanceAllocations by selected month (selYear, selMonth)
+- Redesigned "My Advance" tab to show monthly view:
+  - Summary cards: Total Available (Opening B/F + This Month Advance) and Expenses Used
+  - Closing Balance card with positive/negative styling
+  - Advance allocation record details for selected month only (with remarks, date, amount)
+  - Empty state when no advance allocated for the month
+- Removed unused imports (ArrowDownCircle, ArrowUpRight, TrendingUp, CheckCircle2, XCircle, Clock, Check)
+- Removed unused state (advanceSummary) and constants (MONTH_NAMES, formatMonthYearFromNumbers)
+- Removed duplicate month navigator from Expenses tab
+- Built successfully, committed and pushed to GitHub
+
+Stage Summary:
+- ExpensesPage.tsx refactored: month picker above tabs, advance tab shows monthly detail
+- Committed: "Refactor Expense page: move month picker above tabs, show per-month advance details"
+- Pushed to GitHub: main branch (0d24f7b)
+- Build successful (Vite build, 2.75s)
