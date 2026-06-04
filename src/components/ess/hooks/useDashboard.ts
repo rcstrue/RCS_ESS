@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import {
   fetchProfile, fetchLeaveBalance, fetchLeaves,
-  fetchExpenses, fetchTasks, checkIn, checkOut, fetchAttendance,
+  fetchExpenses, fetchPendingTeamExpenses, fetchTasks, checkIn, checkOut, fetchAttendance,
 } from '@/lib/ess-api';
 import type { ESSSession, LeaveBalance, AttendanceRecord } from '@/lib/ess-types';
 import { todayDateString, getISTMonthKey, getHighAccuracyPosition } from '../helpers';
@@ -32,7 +32,7 @@ export function useDashboard(session: ESSSession | null) {
         fetchProfile(empId),
         fetchLeaveBalance(empId),
         fetchLeaves(empId, 'pending'),
-        fetchExpenses(empId, 'pending'),
+        fetchPendingTeamExpenses(),
         fetchTasks({ assigned_to: empId, status: 'pending' }),
         fetchAttendance(empId, monthKey),
       ]);
