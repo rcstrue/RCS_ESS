@@ -17,6 +17,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Image as ImageIcon,
+  ArrowDownCircle,
+  ArrowUpRight,
+  TrendingUp,
+  Landmark,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -44,12 +48,11 @@ import {
 import {
   fetchExpenses,
   createExpense,
-  approveExpense,
-  fetchPendingTeamExpenses,
   fetchExpenseTypes,
+  fetchAdvanceAllocations,
 } from '@/lib/ess-api';
 import { uploadFile, getFileUrl } from '@/lib/api/config';
-import type { Expense } from '@/lib/ess-types';
+import type { Expense, AdvanceAllocation } from '@/lib/ess-types';
 import { EXPENSE_TYPES } from '@/lib/ess-types';
 
 interface ExpensesPageProps {
@@ -98,6 +101,9 @@ const TYPE_LABEL: Record<string, string> = {
   medical: 'Medical',
 };
 
+const MONTH_NAMES = ['', 'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+
 // ── Formatters ──
 const formatCurrency = (amount: number | undefined | null): string => {
   const num = Number(amount);
@@ -141,6 +147,11 @@ const formatMonthYear = (monthStr: string): string => {
   return date.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
 };
 
+/** Format month number + year to "Month Year" */
+const formatMonthYearFromNumbers = (month: number, year: number): string => {
+  return `${MONTH_NAMES[month] || ''} ${year}`;
+};
+
 /** Navigate months: +1 or -1 */
 const navigateMonth = (monthStr: string, direction: number): string => {
   const [year, month] = monthStr.split('-').map(Number);
@@ -159,11 +170,20 @@ export function ExpensesPage({
   role,
   canApprove,
 }: ExpensesPageProps) {
-  const [activeTab, setActiveTab] = useState('my');
+  const [activeTab, setActiveTab] = useState('advance');
+
+  // ── Advance tab state ──
+  const [advanceAllocations, setAdvanceAllocations] = useState<AdvanceAllocation[]>([]);
+  const [advanceSummary, setAdvanceSummary] = useState<{
+    total_allocated: number;
+    total_used: number;
+    running_balance: number;
+  } | null>(null);
+  const [isLoadingAdvance, setIsLoadingAdvance] = useState(true);
 
   // My expenses
   const [myExpenses, setMyExpenses] = useState<Expense[]>([]);
-  const [isLoadingMy, setIsLoadingMy] = useState(true);
+  const [isLoadingMy, setIsLoadingMy] = useState(false);
   const [serverMonthSummary, setServerMonthSummary] = useState<{
     advance_received: number;
     this_month_advance: number;
@@ -171,10 +191,6 @@ export function ExpensesPage({
     approved_expenses: number;
     closing_balance: number;
   } | null>(null);
-
-  // Pending team expenses (for approve tab)
-  const [pendingTeamExpenses, setPendingTeamExpenses] = useState<Expense[]>([]);
-  const [isLoadingTeam, setIsLoadingTeam] = useState(false);
 
   // Month filter
   const [selectedMonth, setSelectedMonth] = useState(currentMonthString());
@@ -208,14 +224,31 @@ export function ExpensesPage({
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Reject dialog
-  const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
-  const [rejectExpenseId, setRejectExpenseId] = useState<number | null>(null);
-  const [rejectionReason, setRejectionReason] = useState('');
-  const [isRejecting, setIsRejecting] = useState(false);
+  // ── Load advance allocations ──
+  const loadAdvanceAllocations = useCallback(async () => {
+    setIsLoadingAdvance(true);
+    try {
+      const { data, error } = await fetchAdvanceAllocations(employeeId);
+      if (error) {
+        toast.error('Failed to load advances');
+      } else if (data) {
+        setAdvanceAllocations(data.items ?? []);
+        setAdvanceSummary({
+          total_allocated: data.total_allocated ?? 0,
+          total_used: data.total_used ?? 0,
+          running_balance: data.running_balance ?? 0,
+        });
+      }
+    } catch {
+      toast.error('Failed to load advances');
+    } finally {
+      setIsLoadingAdvance(false);
+    }
+  }, [employeeId]);
 
-  // Approve loading state
-  const [approvingId, setApprovingId] = useState<number | null>(null);
+  useEffect(() => {
+    loadAdvanceAllocations();
+  }, [loadAdvanceAllocations]);
 
   // ── Load my expenses ──
   const loadMyExpenses = useCallback(async (month?: string) => {
@@ -226,7 +259,6 @@ export function ExpensesPage({
         toast.error('Failed to load expenses');
       } else {
         setMyExpenses(data?.items ?? []);
-        // Use month_summary from server (has advance from manager_advance_allocations)
         if (data && 'month_summary' in data && (data as Record<string, unknown>).month_summary) {
           setServerMonthSummary((data as Record<string, unknown>).month_summary as typeof serverMonthSummary);
         } else {
@@ -240,28 +272,12 @@ export function ExpensesPage({
     }
   }, [employeeId]);
 
-  // Re-fetch expenses with month param when month changes
+  // Load expenses when switching to expenses tab or month changes
   useEffect(() => {
-    loadMyExpenses(selectedMonth);
-  }, [selectedMonth, loadMyExpenses]);
-
-  // ── Load pending team expenses (single API call) ──
-  const loadPendingTeamExpenses = useCallback(async () => {
-    if (!canApprove) return;
-    setIsLoadingTeam(true);
-    try {
-      const { data, error } = await fetchPendingTeamExpenses();
-      if (error) {
-        toast.error('Failed to load team expenses');
-      } else {
-        setPendingTeamExpenses(data?.items ?? []);
-      }
-    } catch {
-      toast.error('Failed to load team expenses');
-    } finally {
-      setIsLoadingTeam(false);
+    if (activeTab === 'expenses') {
+      loadMyExpenses(selectedMonth);
     }
-  }, [canApprove]);
+  }, [selectedMonth, activeTab, loadMyExpenses]);
 
   // ── Load expense types & categories from DB ──
   useEffect(() => {
@@ -271,16 +287,6 @@ export function ExpensesPage({
       }
     });
   }, []);
-
-  useEffect(() => {
-    loadMyExpenses();
-  }, [loadMyExpenses]);
-
-  useEffect(() => {
-    if (canApprove) {
-      loadPendingTeamExpenses();
-    }
-  }, [canApprove, loadPendingTeamExpenses]);
 
   // ── Month-filtered expenses ──
   const monthExpenses = useMemo(() => {
@@ -304,7 +310,6 @@ export function ExpensesPage({
       .filter((e) => e.status === 'pending')
       .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
-    // Closing balance = Total Advance - Total Expenses
     const closingBalance = serverMonthSummary?.closing_balance ?? (totalAdvance - totalExpense);
 
     return { totalAdvance, totalExpense, totalPending, closingBalance, thisMonthAdvance, openingBalance };
@@ -322,7 +327,6 @@ export function ExpensesPage({
 
     setBillFile(file);
 
-    // Preview
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onload = () => setBillPreview(reader.result as string);
@@ -355,7 +359,6 @@ export function ExpensesPage({
     setIsSubmitting(true);
 
     try {
-      // Upload bill if selected
       let billUrl = '';
       if (billFile) {
         setIsUploading(true);
@@ -387,7 +390,8 @@ export function ExpensesPage({
         toast.success('Expense submitted successfully');
         resetSubmitForm();
         setIsSubmitDialogOpen(false);
-        loadMyExpenses();
+        loadMyExpenses(selectedMonth);
+        loadAdvanceAllocations();
       }
     } catch {
       toast.error('Something went wrong');
@@ -408,131 +412,176 @@ export function ExpensesPage({
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // ── Approve expense ──
-  const handleApprove = async (expense: Expense) => {
-    setApprovingId(expense.id);
-    try {
-      const { error } = await approveExpense(expense.id, 'approved', employeeId);
-      if (error) {
-        toast.error('Failed to approve expense');
-      } else {
-        toast.success('Expense approved');
-        loadPendingTeamExpenses();
-        loadMyExpenses();
-      }
-    } catch {
-      toast.error('Something went wrong');
-    } finally {
-      setApprovingId(null);
-    }
-  };
-
-  // ── Reject expense ──
-  const openRejectDialog = (expenseId: number) => {
-    setRejectExpenseId(expenseId);
-    setRejectionReason('');
-    setIsRejectDialogOpen(true);
-  };
-
-  const handleReject = async () => {
-    if (!rejectExpenseId) return;
-    if (!rejectionReason.trim()) {
-      toast.error('Please provide a reason for rejection');
-      return;
-    }
-
-    setIsRejecting(true);
-    try {
-      const { error } = await approveExpense(
-        rejectExpenseId,
-        'rejected',
-        employeeId,
-        rejectionReason.trim(),
-      );
-      if (error) {
-        toast.error('Failed to reject expense');
-      } else {
-        toast.success('Expense rejected');
-        setIsRejectDialogOpen(false);
-        setRejectExpenseId(null);
-        setRejectionReason('');
-        loadPendingTeamExpenses();
-        loadMyExpenses();
-      }
-    } catch {
-      toast.error('Something went wrong');
-    } finally {
-      setIsRejecting(false);
-    }
-  };
-
   // ── Render ──
-  const isLoading = isLoadingMy || (canApprove && activeTab === 'approve' && isLoadingTeam);
-
-  if (isLoading && activeTab === 'my' && isLoadingMy) {
+  if (isLoadingAdvance && activeTab === 'advance') {
     return <LoadingSkeleton />;
   }
 
   return (
     <div className="flex flex-col gap-4 pb-4">
-      {/* Header with month navigation */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Receipt className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">Expenses</h2>
-        </div>
-        {/* Month navigator */}
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setSelectedMonth((m) => navigateMonth(m, -1))}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-sm font-medium px-2 min-w-[140px] text-center">
-            {formatMonthYear(selectedMonth)}
-          </span>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setSelectedMonth((m) => navigateMonth(m, 1))}
-            disabled={selectedMonth >= currentMonthString()}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <Receipt className="h-5 w-5 text-primary" />
+        <h2 className="text-lg font-semibold">Expenses</h2>
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="my" className="flex-1 sm:flex-auto">
+          <TabsTrigger value="advance" className="flex-1 sm:flex-auto">
+            <Landmark className="h-4 w-4 mr-1.5" />
+            My Advance
+          </TabsTrigger>
+          <TabsTrigger value="expenses" className="flex-1 sm:flex-auto">
             <Wallet className="h-4 w-4 mr-1.5" />
             My Expenses
             {monthSummary.totalPending > 0 && (
               <Badge variant="secondary" className="ml-2 text-xs px-1.5">
-                {monthExpenses.filter((e) => e.status === 'pending').length}
+                {monthSummary.totalPending > 0 ? monthExpenses.filter((e) => e.status === 'pending').length : 0}
               </Badge>
             )}
           </TabsTrigger>
-          {canApprove && (
-            <TabsTrigger value="approve" className="flex-1 sm:flex-auto">
-              <CheckCircle2 className="h-4 w-4 mr-1.5" />
-              Approve
-              {pendingTeamExpenses.length > 0 && (
-                <Badge variant="secondary" className="ml-2 text-xs px-1.5">
-                  {pendingTeamExpenses.length}
-                </Badge>
-              )}
-            </TabsTrigger>
-          )}
         </TabsList>
 
-        {/* ── My Expenses Tab ── */}
-        <TabsContent value="my" className="mt-4">
+        {/* ═══════════════════════════════════════════════════════════════
+           TAB 1: My Advance — Shows all advance received from office
+           ═══════════════════════════════════════════════════════════════ */}
+        <TabsContent value="advance" className="mt-4">
+          {isLoadingAdvance ? (
+            <LoadingSkeleton />
+          ) : (
+            <>
+              {/* Summary cards */}
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                <Card>
+                  <CardContent className="p-3 flex flex-col gap-1">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <ArrowDownCircle className="h-3.5 w-3.5 text-emerald-500" />
+                      Received
+                    </div>
+                    <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
+                      {formatCurrency(advanceSummary?.total_allocated ?? 0)}
+                    </span>
+                    <span className="text-[9px] text-muted-foreground">Total Advance</span>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3 flex flex-col gap-1">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <ArrowUpRight className="h-3.5 w-3.5 text-blue-500" />
+                      Used
+                    </div>
+                    <span className="text-sm font-bold text-blue-700 dark:text-blue-400">
+                      {formatCurrency(advanceSummary?.total_used ?? 0)}
+                    </span>
+                    <span className="text-[9px] text-muted-foreground">Total Expenses</span>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3 flex flex-col gap-1">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <TrendingUp className="h-3.5 w-3.5 text-amber-500" />
+                      Balance
+                    </div>
+                    <span className={`text-sm font-bold ${(advanceSummary?.running_balance ?? 0) < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                      {formatCurrency(advanceSummary?.running_balance ?? 0)}
+                    </span>
+                    <span className="text-[9px] text-muted-foreground">Remaining</span>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Running Balance card */}
+              <Card className={`border-2 mb-4 ${(advanceSummary?.running_balance ?? 0) < 0 ? 'border-rose-500/40 bg-rose-500/5' : 'border-emerald-500/30 bg-emerald-500/5'}`}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">
+                        {(advanceSummary?.running_balance ?? 0) < 0 ? 'Over Utilized' : 'Available Balance'}
+                      </div>
+                      <span className={`text-2xl font-bold ${(advanceSummary?.running_balance ?? 0) < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                        {formatCurrency(advanceSummary?.running_balance ?? 0)}
+                      </span>
+                    </div>
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10">
+                      <Banknote className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Advance Allocations list */}
+              {advanceAllocations.length === 0 ? (
+                <EmptyState
+                  title="No advances received"
+                  description="Advance allocations from the office will appear here."
+                  icon="advance"
+                />
+              ) : (
+                <ScrollArea className="h-[calc(100vh-420px)]">
+                  <div className="flex flex-col gap-2">
+                    {advanceAllocations.map((alloc) => (
+                      <Card key={alloc.id} className="border">
+                        <CardContent className="p-3 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10">
+                              <Landmark className="h-4.5 w-4.5 text-emerald-600 dark:text-emerald-400" />
+                            </div>
+                            <div>
+                              <div className="text-sm font-semibold">
+                                {formatMonthYearFromNumbers(alloc.month, alloc.year)}
+                              </div>
+                              {alloc.remarks && (
+                                <div className="text-[11px] text-muted-foreground truncate max-w-[180px]">
+                                  {alloc.remarks}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-base font-bold text-emerald-700 dark:text-emerald-400">
+                              {formatCurrency(alloc.amount)}
+                            </div>
+                            <div className="text-[9px] text-muted-foreground">Advance</div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </>
+          )}
+        </TabsContent>
+
+        {/* ═══════════════════════════════════════════════════════════════
+           TAB 2: My Expenses — Shows expenses with month navigation
+           ═══════════════════════════════════════════════════════════════ */}
+        <TabsContent value="expenses" className="mt-4">
+          {/* Month navigator */}
+          <div className="flex items-center justify-end gap-1 mb-3">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setSelectedMonth((m) => navigateMonth(m, -1))}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium px-2 min-w-[140px] text-center">
+              {formatMonthYear(selectedMonth)}
+            </span>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setSelectedMonth((m) => navigateMonth(m, 1))}
+              disabled={selectedMonth >= currentMonthString()}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+
           {/* Summary cards */}
           <div className="grid grid-cols-2 gap-3 mb-3">
             <Card>
@@ -613,34 +662,6 @@ export function ExpensesPage({
             </ScrollArea>
           )}
         </TabsContent>
-
-        {/* ── Approve Tab ── */}
-        {canApprove && (
-          <TabsContent value="approve" className="mt-4">
-            {isLoadingTeam ? (
-              <LoadingSkeleton />
-            ) : pendingTeamExpenses.length === 0 ? (
-              <EmptyState
-                title="No pending approvals"
-                description="All team expenses have been processed."
-              />
-            ) : (
-              <ScrollArea className="h-[calc(100vh-260px)]">
-                <div className="flex flex-col gap-3">
-                  {pendingTeamExpenses.map((expense) => (
-                    <PendingTeamExpenseCard
-                      key={expense.id}
-                      expense={expense}
-                      isApproving={approvingId === expense.id}
-                      onApprove={handleApprove}
-                      onReject={openRejectDialog}
-                    />
-                  ))}
-                </div>
-              </ScrollArea>
-            )}
-          </TabsContent>
-        )}
       </Tabs>
 
       {/* Submit Expense Dialog */}
@@ -845,63 +866,6 @@ export function ExpensesPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Reject Expense Dialog */}
-      <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <XCircle className="h-5 w-5" />
-              Reject Expense
-            </DialogTitle>
-            <DialogDescription>
-              Please provide a reason for rejecting this expense claim.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex flex-col gap-4 py-2">
-            <Textarea
-              placeholder="Reason for rejection..."
-              value={rejectionReason}
-              onChange={(e) => setRejectionReason(e.target.value)}
-              rows={3}
-              maxLength={300}
-              autoFocus
-            />
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsRejectDialogOpen(false);
-                setRejectExpenseId(null);
-                setRejectionReason('');
-              }}
-              disabled={isRejecting}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleReject}
-              disabled={isRejecting || !rejectionReason.trim()}
-            >
-              {isRejecting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Rejecting...
-                </>
-              ) : (
-                <>
-                  <X className="h-4 w-4 mr-1" />
-                  Reject
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
@@ -963,96 +927,28 @@ function ExpenseCard({ expense }: { expense: Expense }) {
   );
 }
 
-function PendingTeamExpenseCard({
-  expense,
-  isApproving,
-  onApprove,
-  onReject,
-}: {
-  expense: Expense;
-  isApproving: boolean;
-  onApprove: (expense: Expense) => void;
-  onReject: (expenseId: number) => void;
-}) {
-  return (
-    <Card className="border">
-      <CardContent className="p-4">
-        {/* Employee name */}
-        <div className="flex items-center justify-between mb-2">
-          <span className="font-semibold text-sm">
-            {expense.employee_name || 'Unknown'}
-          </span>
-          <Badge variant="outline" className={CATEGORY_BADGE[expense.category || ''] || ''}>
-            {CATEGORY_LABEL[expense.category || ''] || expense.category || expense.type}
-          </Badge>
-        </div>
-
-        {/* Amount + Date */}
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-lg font-bold">
-            {formatCurrency(expense.amount)}
-          </span>
-          <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
-            <CalendarDays className="h-3 w-3" />
-            {formatDate(expense.expense_date)}
-          </span>
-        </div>
-
-        {/* Description */}
-        {expense.description && (
-          <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
-            {expense.description}
-          </p>
-        )}
-
-        {/* Actions */}
-        <div className="flex justify-end gap-2 mt-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-emerald-700 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
-            disabled={isApproving}
-            onClick={() => onApprove(expense)}
-          >
-            {isApproving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Check className="h-4 w-4 mr-1" />
-            )}
-            Approve
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-rose-700 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/10"
-            disabled={isApproving}
-            onClick={() => onReject(expense.id)}
-          >
-            <X className="h-4 w-4 mr-1" />
-            Reject
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 function EmptyState({
   title,
   description,
   onAction,
   actionLabel,
+  icon = 'expense',
 }: {
   title: string;
   description: string;
   onAction?: () => void;
   actionLabel?: string;
+  icon?: 'expense' | 'advance';
 }) {
   return (
     <Card className="border-dashed">
       <CardContent className="flex flex-col items-center justify-center py-16 text-center">
         <div className="rounded-full bg-muted p-4 mb-4">
-          <Receipt className="h-8 w-8 text-muted-foreground" />
+          {icon === 'advance' ? (
+            <Landmark className="h-8 w-8 text-muted-foreground" />
+          ) : (
+            <Receipt className="h-8 w-8 text-muted-foreground" />
+          )}
         </div>
         <h3 className="font-semibold text-lg mb-1">{title}</h3>
         <p className="text-sm text-muted-foreground mb-4 max-w-xs">

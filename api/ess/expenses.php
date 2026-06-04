@@ -58,6 +58,12 @@ function handleGetExpenses(): void
         return;
     }
 
+    // ─── view=advances: Return all advance allocations for the employee ──
+    if ($view === 'advances') {
+        handleAdvanceAllocations($authId);
+        return;
+    }
+
     $queryEmployeeId = isset($_GET['employee_id']) ? $_GET['employee_id'] : $authId;
     $statusFilter    = isset($_GET['status']) ? $_GET['status'] : '';
     $categoryFilter  = isset($_GET['category']) ? $_GET['category'] : '';
@@ -407,6 +413,73 @@ function handlePendingTeamExpenses($authId): void
     $expStmt->close();
 
     jsonOutput(array('success' => true, 'data' => array('items' => $expenses)));
+}
+
+// ─── GET: Advance Allocations (My Advance tab) ─────────────────────────────
+
+function handleAdvanceAllocations($authId): void
+{
+    $conn = getDbConnection();
+    $queryEmployeeId = isset($_GET['employee_id']) ? $_GET['employee_id'] : $authId;
+
+    // Fetch all advance allocations ordered by year DESC, month DESC
+    $allocStmt = $conn->prepare(
+        'SELECT id, amount, month, year, remarks, allocated_by, created_at 
+         FROM manager_advance_allocations 
+         WHERE manager_id = ? 
+         ORDER BY year DESC, month DESC'
+    );
+    if (!$allocStmt) {
+        jsonOutput(array('success' => true, 'data' => array('items' => array(), 'total_allocated' => 0)));
+        return;
+    }
+    $allocStmt->bind_param('s', $queryEmployeeId);
+    $allocStmt->execute();
+    $result = $allocStmt->get_result();
+
+    $allocations = array();
+    $totalAllocated = 0;
+    while ($row = $result->fetch_assoc()) {
+        $amount = (float)($row['amount'] ?? 0);
+        $totalAllocated += $amount;
+        $allocations[] = array(
+            'id'          => (int)$row['id'],
+            'amount'      => $amount,
+            'month'       => (int)$row['month'],
+            'year'        => (int)$row['year'],
+            'remarks'     => isset($row['remarks']) ? $row['remarks'] : '',
+            'allocated_by'=> isset($row['allocated_by']) ? (int)$row['allocated_by'] : 0,
+            'created_at'  => isset($row['created_at']) ? $row['created_at'] : '',
+        );
+    }
+    $allocStmt->close();
+
+    // Calculate running balance: total allocated minus total approved/reimbursed expenses
+    $totalUsed = 0;
+    try {
+        $usedStmt = $conn->prepare(
+            "SELECT COALESCE(SUM(amount),0) AS t FROM ess_expenses WHERE employee_id = ? AND category IN ('expense','employee_advance') AND status IN ('approved','reimbursed')"
+        );
+        if ($usedStmt) {
+            $usedStmt->bind_param('s', $queryEmployeeId);
+            $usedStmt->execute();
+            $usedRow = $usedStmt->get_result()->fetch_assoc();
+            $totalUsed = (float)($usedRow['t'] ?? 0);
+            $usedStmt->close();
+        }
+    } catch (\Throwable $e) {
+        error_log('total_used error: ' . $e->getMessage());
+    }
+
+    jsonOutput(array(
+        'success' => true,
+        'data' => array(
+            'items'            => $allocations,
+            'total_allocated'  => $totalAllocated,
+            'total_used'       => $totalUsed,
+            'running_balance'  => $totalAllocated - $totalUsed,
+        )
+    ));
 }
 
 // ─── POST: Create Expense ─────────────────────────────────────────────────

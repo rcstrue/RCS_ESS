@@ -160,6 +160,17 @@ export interface Expense {
   updated_at?: string;
 }
 
+// ===== Advance Allocations =====
+export interface AdvanceAllocation {
+  id: number;
+  amount: number;
+  month: number;
+  year: number;
+  remarks?: string;
+  allocated_by?: number;
+  created_at?: string;
+}
+
 // ===== Helpdesk =====
 export interface HelpdeskTicket {
   id: number;

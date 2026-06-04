@@ -3,7 +3,7 @@ import type {
   LoginResponse, AttendanceRecord, AttendanceSummary,
   LeaveRequest, LeaveBalance, Task, Expense,
   HelpdeskTicket, Announcement, PaginatedResponse,
-  ClientOption, UnitOption, Employee
+  ClientOption, UnitOption, Employee, AdvanceAllocation
 } from './ess-types';
 
 // ══════════════════════════════════════════════════════════════
@@ -166,6 +166,15 @@ export async function fetchPendingTeamExpenses() {
 
 export async function fetchExpenseTypes() {
   return unwrap<{ categories: string[]; types: string[] }>(apiRequest<{ categories: string[]; types: string[] }>('/ess/expenses?view=types'));
+}
+
+export async function fetchAdvanceAllocations(employee_id: number) {
+  return unwrap<{
+    items: AdvanceAllocation[];
+    total_allocated: number;
+    total_used: number;
+    running_balance: number;
+  }>(apiRequest('/ess/expenses?view=advances&employee_id=' + employee_id));
 }
 
 export async function createExpense(data: { employee_id: number; category: string; type: string; amount: number; expense_date: string; description?: string; bill_url?: string; bill_type?: string }) {
