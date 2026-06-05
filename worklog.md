@@ -575,3 +575,26 @@ Stage Summary:
 - 9 files changed, 797 insertions, 24 deletions
 - Committed as c80d261, pushed to GitHub
 - Key files: api/ess/access.php, src/contexts/AccessContext.tsx, src/lib/access-types.ts
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix employee page not showing despite allocations in employee_city_allocations table
+
+Work Log:
+- Investigated root cause: access.php was reading from wrong table (ess_access_allocations which was empty)
+- Found that employee_city_allocations stores unit NAMES (strings like "SEVEN SEAS INFINITY CINEMA") not unit IDs
+- Rewrote access.php to read from employee_city_allocations table
+- Added unit name → unit ID conversion via JOIN with units table
+- Added city name → city ID conversion via JOIN with ess_cities table
+- Added role derivation logic: unit allocations → supervisor, city allocations → manager
+- Auto-creates employee_city_allocations table if not exists
+- Verified DirectoryPage already has auto-load for access-controlled roles (from previous session)
+- Built frontend and deployed both frontend + backend to join.rcsfacility.com
+- Pushed to GitHub (commit 7e2791d)
+
+Stage Summary:
+- Root cause: access.php read from ess_access_allocations (empty) instead of employee_city_allocations (populated)
+- Root cause: allocation_value contained unit NAMES not unit IDs, needed name-to-ID conversion
+- Fix deployed to production, pushed to GitHub
+- Employee 9 with 24 unit allocations should now see employees from those units on the Directory page
