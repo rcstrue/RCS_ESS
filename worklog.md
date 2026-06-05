@@ -525,3 +525,29 @@ Stage Summary:
 - Fixed useDashboard.ts: pendingExpenses now uses fetchPendingTeamExpenses()
 - Pushed to GitHub: main branch (c28f1a4)
 - Build successful
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix Employees page white screen - ReferenceError: Cannot access 'L' before initialization
+
+Work Log:
+- User reported employees page showing white screen with error: `ReferenceError: Cannot access 'L' before initialization` at `eL (index-lK7aq08T.js:696:31131)`
+- Built project with sourcemaps to decode minified error location
+- Used source-map consumer to decode: error at `DirectoryPage.tsx:147:15` — `usePullToRefresh` hook calling `loadEmployees` before it's declared
+- Root cause: `const pullRefresh = usePullToRefresh({ onRefresh: loadEmployees })` was at line 147, but `const loadEmployees = useCallback(...)` was at line 170. JavaScript's `const` has a temporal dead zone — accessing it before declaration throws ReferenceError
+- Discovered the SAME bug pattern in all 7 ESS pages that use pull-to-refresh
+- Fixed all 7 files by moving `usePullToRefresh()` calls to AFTER the `useCallback` declarations they reference:
+  - DirectoryPage.tsx (employees/directory)
+  - AttendancePage.tsx
+  - AnnouncementsPage.tsx
+  - HelpdeskPage.tsx
+  - ExpensesPage.tsx
+  - TasksPage.tsx
+  - LeavesPage.tsx
+- Build succeeded, committed as `2a6c3eb`, pushed to GitHub
+
+Stage Summary:
+- Root cause: Temporal Dead Zone error from forward-referencing const variables in usePullToRefresh hook calls
+- Fix: Reordered code to declare callbacks before hook calls in all 7 affected pages
+- Pushed to GitHub: https://github.com/rcstrue/RCS_ESS.git (commit 2a6c3eb)
