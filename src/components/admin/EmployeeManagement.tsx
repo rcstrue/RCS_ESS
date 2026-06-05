@@ -80,10 +80,10 @@ export function EmployeeManagement({ userRole }: EmployeeManagementProps) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(e =>
         e.full_name?.toLowerCase().includes(query) ||
-        e.mobile_number.includes(query) ||
-        e.email?.toLowerCase().includes(query) ||
-        e.aadhaar_number?.includes(query) ||
-        String(e.employee_code).includes(query)
+        (e.mobile_number || '').toLowerCase().includes(query) ||
+        (e.email || '').toLowerCase().includes(query) ||
+        String(e.aadhaar_number || '').includes(query) ||
+        String(e.employee_code || '').includes(query)
       );
     }
 

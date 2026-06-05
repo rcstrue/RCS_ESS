@@ -86,12 +86,13 @@ function maskMobile(mobile: string): string {
   return mobile || '';
 }
 
-function maskSensitive(value: string): string {
-  if (!value) return '****';
-  if (value.length <= 4) return '****';
-  const first = value.slice(0, 2);
-  const last = value.slice(-2);
-  const middleLen = value.length - 4;
+function maskSensitive(value: string | number | undefined): string {
+  const str = value != null ? String(value) : '';
+  if (!str) return '****';
+  if (str.length <= 4) return '****';
+  const first = str.slice(0, 2);
+  const last = str.slice(-2);
+  const middleLen = str.length - 4;
   return first + '*'.repeat(middleLen) + last;
 }
 
@@ -724,11 +725,12 @@ function SensitiveProfileRow({
 }: {
   icon: typeof User;
   label: string;
-  value?: string;
+  value?: string | number;
 }) {
   const [revealed, setRevealed] = useState(false);
+  const displayValue = value != null ? String(value) : '';
 
-  if (!value) {
+  if (!displayValue) {
     return (
       <div className="flex items-start gap-3">
         <Icon className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -746,7 +748,7 @@ function SensitiveProfileRow({
       <div className="flex flex-col flex-1 min-w-0">
         <span className="text-xs text-muted-foreground">{label}</span>
         <span className="text-sm font-medium font-mono">
-          {revealed ? value : maskSensitive(value)}
+          {revealed ? displayValue : maskSensitive(displayValue)}
         </span>
       </div>
       <button
