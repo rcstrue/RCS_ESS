@@ -26,18 +26,23 @@ import {
   Clock,
   Eye,
   EyeOff,
+  Download,
+  MapPin,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { getFileUrl } from '@/lib/api/config';
 import { usePullToRefresh } from './hooks/usePullToRefresh';
+import { useExportCSV } from './hooks/useExportCSV';
 import {
   fetchEmployees,
   fetchEmployeeById,
   fetchClients,
   fetchUnits,
+  fetchCities,
 } from '@/lib/ess-api';
 import type { Employee, ClientOption, UnitOption } from '@/lib/ess-types';
+import type { AccessLevel, CityOption } from '@/lib/access-types';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -65,6 +70,11 @@ interface DirectoryPageProps {
   employeeId: number;
   role: string;
   scope: string;
+  accessLevel: AccessLevel;
+  cityIds: number[];
+  unitIds: number[];
+  cityIdsParam: string;
+  unitIdsParam: string;
 }
 
 // ── Constants ──────────────────────────────────────────
@@ -115,6 +125,11 @@ export default function DirectoryPage({
   employeeId,
   role,
   scope,
+  accessLevel,
+  cityIds,
+  unitIds,
+  cityIdsParam,
+  unitIdsParam,
 }: DirectoryPageProps) {
   // ── State ──
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -130,10 +145,12 @@ export default function DirectoryPage({
   const [searchInput, setSearchInput] = useState('');
   const [selectedClient, setSelectedClient] = useState('');
   const [selectedUnit, setSelectedUnit] = useState('');
+  const [selectedCity, setSelectedCity] = useState('');
 
   // Filter options
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [units, setUnits] = useState<UnitOption[]>([]);
+  const [cities, setCities] = useState<CityOption[]>([]);
   const [filtersLoading, setFiltersLoading] = useState(true);
 
   // Profile dialog
@@ -146,20 +163,29 @@ export default function DirectoryPage({
   const loadFilters = useCallback(async () => {
     setFiltersLoading(true);
     try {
-      const [clientsResult, unitsResult] = await Promise.all([
-        fetchClients(scope, employeeId),
-        fetchUnits(scope, employeeId),
-      ]);
-      const clientsRes = clientsResult?.data;
-      const unitsRes = unitsResult?.data;
-      setClients(Array.isArray(clientsRes) ? clientsRes : []);
-      setUnits(Array.isArray(unitsRes) ? unitsRes : []);
+      const promises: Promise<void>[] = [
+        fetchClients(scope, employeeId).then((r) => {
+          setClients(Array.isArray(r?.data) ? r.data : []);
+        }),
+        fetchUnits(scope, employeeId).then((r) => {
+          setUnits(Array.isArray(r?.data) ? r.data : []);
+        }),
+      ];
+      // Fetch cities for managers (city-level access)
+      if (accessLevel === 'city' || accessLevel === 'full') {
+        promises.push(
+          fetchCities().then((r) => {
+            setCities(Array.isArray(r?.data) ? r.data : []);
+          }),
+        );
+      }
+      await Promise.all(promises);
     } catch (err) {
       console.error('Failed to load filters:', err);
     } finally {
       setFiltersLoading(false);
     }
-  }, [scope, employeeId]);
+  }, [scope, employeeId, accessLevel]);
 
   // ── Load employees (only after user applies a filter or search) ──
   const loadEmployees = useCallback(async () => {
@@ -175,6 +201,9 @@ export default function DirectoryPage({
         q: searchQuery || undefined,
         client_id: selectedClient ? Number(selectedClient) : undefined,
         unit_id: selectedUnit ? Number(selectedUnit) : undefined,
+        // Access allocation from payroll (server-side filtering)
+        city_ids: cityIds.length > 0 ? cityIds : undefined,
+        unit_ids: unitIds.length > 0 ? unitIds : undefined,
       });
       if (fetchError) {
         toast.error(fetchError);
@@ -190,7 +219,7 @@ export default function DirectoryPage({
     } finally {
       setLoading(false);
     }
-  }, [scope, employeeId, page, searchQuery, selectedClient, selectedUnit]);
+  }, [scope, employeeId, page, searchQuery, selectedClient, selectedUnit, cityIds, unitIds]);
 
   // Pull-to-refresh (after loadEmployees is defined to avoid TDZ)
   const pullRefresh = usePullToRefresh<HTMLDivElement>({
@@ -227,9 +256,27 @@ export default function DirectoryPage({
     setSearchInput('');
     setSelectedClient('');
     setSelectedUnit('');
+    setSelectedCity('');
   };
 
-  const hasActiveFilters = searchQuery || (selectedClient && selectedClient !== 'all_clients') || (selectedUnit && selectedUnit !== 'all_units');
+  const hasActiveFilters = searchQuery || (selectedClient && selectedClient !== 'all_clients') || (selectedUnit && selectedUnit !== 'all_units') || selectedCity;
+
+  // ── CSV Export ──
+  const { exportCSV } = useExportCSV();
+  const handleExport = () => {
+    const headers = ['Name', 'Employee Code', 'Mobile', 'Designation', 'Client', 'Unit', 'City'];
+    const rows = employees.map((e) => [
+      e.full_name || '',
+      String(e.employee_code || ''),
+      e.mobile_number || '',
+      e.designation || '',
+      e.client_name || '',
+      e.unit_name || '',
+      (e as Record<string, unknown>).city || '',
+    ]);
+    exportCSV('Employee_Directory.csv', headers, rows);
+    toast.success('Directory exported successfully');
+  };
 
   // ── Open profile dialog with full details ──
   const openProfile = async (emp: Employee) => {
@@ -267,13 +314,21 @@ export default function DirectoryPage({
         <Loader2 className={cn("h-5 w-5 text-primary", (pullRefresh.isRefreshing || pullRefresh.pullDistance > 20) && "animate-spin")} />
       </div>
       {/* Header */}
-      <div>
-        <h2 className="text-xl font-bold tracking-tight">Directory</h2>
-        <p className="text-sm text-muted-foreground">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight">Directory</h2>
+          <p className="text-sm text-muted-foreground">
           {searchedOnce && total > 0 ? `${total} employee${total > 1 ? 's' : ''} found` :
            searchedOnce && total === 0 ? 'No employees found' :
            'Search employees by name, client, or unit'}
         </p>
+        </div>
+        {employees.length > 0 && (
+          <Button variant="outline" size="sm" className="gap-1.5 shrink-0 mt-0.5" onClick={handleExport}>
+            <Download className="h-4 w-4" />
+            <span className="text-xs font-medium hidden sm:inline">Export</span>
+          </Button>
+        )}
       </div>
 
       {/* Search */}
@@ -331,6 +386,24 @@ export default function DirectoryPage({
         </Select>
       </div>
 
+      {/* City filter (for managers with city-level access) */}
+      {(accessLevel === 'city' || accessLevel === 'full') && cities.length > 0 && (
+        <Select value={selectedCity} onValueChange={(v) => setSelectedCity(v)}>
+          <SelectTrigger className="h-9 text-sm">
+            <MapPin className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+            <SelectValue placeholder={filtersLoading ? 'Loading...' : 'All Cities'} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All Cities</SelectItem>
+            {cities.map((c) => (
+              <SelectItem key={c.id} value={String(c.id)}>
+                {c.name}{c.state ? ` (${c.state})` : ''}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+
       {/* Active filters indicator */}
       {hasActiveFilters && (
         <div className="flex items-center gap-2">
@@ -355,6 +428,14 @@ export default function DirectoryPage({
             <Badge variant="secondary" className="gap-1 text-xs">
               {filteredUnits.find((u) => String(u.id) === selectedUnit)?.name || 'Unit'}
               <button onClick={() => setSelectedUnit('')}>
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+          {selectedCity && (
+            <Badge variant="secondary" className="gap-1 text-xs">
+              📍 {cities.find((c) => String(c.id) === selectedCity)?.name || 'City'}
+              <button onClick={() => setSelectedCity('')}>
                 <X className="h-3 w-3" />
               </button>
             </Badge>

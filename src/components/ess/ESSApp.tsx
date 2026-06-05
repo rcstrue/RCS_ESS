@@ -30,8 +30,11 @@ import { useDashboard } from './hooks/useDashboard';
 import { usePwaInstall } from './hooks/usePwaInstall';
 import { useNotifications } from './hooks/useNotifications';
 
+// Access
+import { AccessProvider, useAccess } from '@/contexts/AccessContext';
+
 // Helpers
-import { getGreeting, getInitials, getScope, canApprove, canViewDirectory, detectRole } from './helpers';
+import { getGreeting, getInitials, getScope, canApprove, detectRole } from './helpers';
 
 // shadcn/ui
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -44,6 +47,14 @@ import { Building2, Loader2, UserPlus, Bell } from 'lucide-react';
 // ══════════════════════════════════════════════════════════════
 
 export default function ESSApp({ onBackToRegistration }: { onBackToRegistration: () => void }) {
+  return (
+    <AccessProvider>
+      <ESSAppInner onBackToRegistration={onBackToRegistration} />
+    </AccessProvider>
+  );
+}
+
+function ESSAppInner({ onBackToRegistration }: { onBackToRegistration: () => void }) {
   // ── Auth ──
   const [session, setSession] = useState<ESSSession | null>(null);
   const [forcePinSession, setForcePinSession] = useState<ESSSession | null>(null);
@@ -109,6 +120,11 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
     toast.success('Logged out successfully');
   }, []);
 
+  const clearSessionAndAccess = useCallback(() => {
+    clearSession();
+    // AccessProvider will handle clearing access via its own context
+  }, [clearSession]);
+
   const handleLogin = useCallback((s: ESSSession) => {
     saveSession(s);
     toast.success(`Welcome, ${s.employee.full_name}!`);
@@ -131,6 +147,23 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
       toast.success(`Welcome, ${s.employee.full_name}!`);
     }
   }, [saveSession]);
+
+  // ── Access (must be after session check, before render) ──
+  const access = useAccess();
+
+  // Fetch access allocation when session becomes available
+  useEffect(() => {
+    if (session && !access.isLoaded) {
+      access.refreshAccess();
+    }
+  }, [session]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear access on logout
+  useEffect(() => {
+    if (!session && access.isLoaded) {
+      access.clearAccess();
+    }
+  }, [session]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Navigation ──
   const [currentPage, setCurrentPage] = useState('dashboard');
@@ -299,7 +332,18 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
             />
           </div>
         )}
-        {currentPage === 'directory' && canViewDirectory(role) && <DirectoryPage employeeId={emp.id} role={role} scope={scope} />}
+        {currentPage === 'directory' && access.canViewDirectory() && (
+          <DirectoryPage
+            employeeId={emp.id}
+            role={role}
+            scope={scope}
+            accessLevel={access.accessLevel}
+            cityIds={access.allocation?.cities ?? []}
+            unitIds={access.allocation?.units ?? []}
+            cityIdsParam={access.cityIdsParam}
+            unitIdsParam={access.unitIdsParam}
+          />
+        )}
         {currentPage === 'expenses' && <ExpensesPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} onAddNotification={handleAddNotification} />}
         {currentPage === 'attendance' && <AttendancePage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} />}
         {currentPage === 'leaves' && <LeavesPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} onAddNotification={handleAddNotification} />}
@@ -332,7 +376,7 @@ export default function ESSApp({ onBackToRegistration }: { onBackToRegistration:
         {currentPage === 'settings' && <SettingsView employee={emp} onLogout={clearSession} />}
       </main>
 
-      <BottomNav currentPage={currentPage} showMoreMenu={showMoreMenu} setShowMoreMenu={setShowMoreMenu} onNavigate={navigate} role={role} isInstalled={pwa.state.isInstalled} />
+      <BottomNav currentPage={currentPage} showMoreMenu={showMoreMenu} setShowMoreMenu={setShowMoreMenu} onNavigate={navigate} isInstalled={pwa.state.isInstalled} canViewDirectory={access.canViewDirectory()} />
 
       {/* Post-Install Permission Dialog */}
       <PermissionDialog

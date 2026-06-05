@@ -36,6 +36,9 @@ try {
         case 'employees':
             _handleEmployeeDirectory();
             break;
+        case 'cities':
+            _handleCities();
+            break;
         default:
             jsonOutput(['success' => false, 'error' => 'Invalid view parameter'], 400);
     }
@@ -468,4 +471,47 @@ function _handleEmployeeDirectory(): void
             ...buildPagination($total, $page, $limit)
         ]
     ]);
+}
+
+// ─── view=cities: Cities List ─────────────────────────────────────────────
+
+function _handleCities(): void
+{
+    requireAuth();
+    $conn = getDbConnection();
+
+    $search = trim($_GET['q'] ?? '');
+
+    $query = 'SELECT id, name, state FROM ess_cities WHERE is_active = 1';
+    $types = '';
+    $params = [];
+
+    if (!empty($search)) {
+        $query .= ' AND (name LIKE ? OR state LIKE ?)';
+        $types .= 'ss';
+        $searchTerm = '%' . $search . '%';
+        $params[] = $searchTerm;
+        $params[] = $searchTerm;
+    }
+
+    $query .= ' ORDER BY name ASC';
+
+    $stmt = $conn->prepare($query);
+    if (!empty($params)) {
+        $stmt->bind_param($types, ...$params);
+    }
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    $cities = [];
+    while ($row = $result->fetch_assoc()) {
+        $cities[] = [
+            'id' => (int)$row['id'],
+            'name' => $row['name'],
+            'state' => $row['state'] ?? '',
+        ];
+    }
+    $stmt->close();
+
+    jsonOutput(['success' => true, 'data' => $cities]);
 }

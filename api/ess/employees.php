@@ -29,6 +29,10 @@ try {
     $department = $_GET['department'] ?? '';
     list($page, $limit, $offset) = getPaginationParams();
 
+    // Access allocation params (sent from frontend useAccess hook)
+    $cityIds = isset($_GET['city_ids']) ? array_map('intval', explode(',', $_GET['city_ids'])) : array();
+    $unitIds = isset($_GET['unit_ids']) ? array_map('intval', explode(',', $_GET['unit_ids'])) : array();
+
     // ─── Build Base Query ─────────────────────────────────────────────────
     $whereClause = 'WHERE e.status = ?';
     $types = 's';
@@ -42,7 +46,22 @@ try {
     }
     // 'all' = no role filter (default)
 
-    // Scope-based filtering
+    // ─── Access allocation filtering (payroll-driven) ───────────────
+    // If city_ids or unit_ids are provided, enforce server-side access
+    if (!empty($cityIds)) {
+        $cityPlaceholders = implode(',', array_fill(0, count($cityIds), '?'));
+        $whereClause .= " AND u.city_id IN ($cityPlaceholders)";
+        $types .= str_repeat('i', count($cityIds));
+        $params = array_merge($params, $cityIds);
+    }
+    if (!empty($unitIds)) {
+        $unitPlaceholders = implode(',', array_fill(0, count($unitIds), '?'));
+        $whereClause .= " AND e.unit_id IN ($unitPlaceholders)";
+        $types .= str_repeat('i', count($unitIds));
+        $params = array_merge($params, $unitIds);
+    }
+
+    // Scope-based filtering (legacy fallback when no access allocation)
     if ($scope === 'team') {
         $cacheStmt = $conn->prepare('SELECT unit_id, client_id FROM ess_employee_cache WHERE employee_id = ?');
         if (!$cacheStmt) {

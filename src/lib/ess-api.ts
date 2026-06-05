@@ -241,7 +241,17 @@ export async function fetchEmployeeById(employeeId: number) {
   return unwrap<Employee>(apiRequest<Employee>(`/ess/ess-employees?id=${employeeId}`));
 }
 
-export async function fetchEmployees(params: { scope?: string; requester_id?: number; limit?: number; page?: number; q?: string; client_id?: number; unit_id?: number }) {
+export async function fetchEmployees(params: {
+  scope?: string;
+  requester_id?: number;
+  limit?: number;
+  page?: number;
+  q?: string;
+  client_id?: number;
+  unit_id?: number;
+  city_ids?: number[];
+  unit_ids?: number[];
+}) {
   const searchParams = new URLSearchParams();
   if (params.scope) searchParams.set('scope', params.scope);
   if (params.requester_id) searchParams.set('requester_id', String(params.requester_id));
@@ -250,7 +260,27 @@ export async function fetchEmployees(params: { scope?: string; requester_id?: nu
   if (params.q) searchParams.set('q', params.q);
   if (params.client_id) searchParams.set('client_id', String(params.client_id));
   if (params.unit_id) searchParams.set('unit_id', String(params.unit_id));
+  // Access allocation params (payroll-driven city/unit filtering)
+  if (params.city_ids?.length) searchParams.set('city_ids', params.city_ids.join(','));
+  if (params.unit_ids?.length) searchParams.set('unit_ids', params.unit_ids.join(','));
   return unwrap<PaginatedResponse<Employee>>(apiRequest<PaginatedResponse<Employee>>(`/ess/employees?${searchParams}`));
+}
+
+// ===== Access Allocation (from Payroll) =====
+export async function fetchAccessAllocation() {
+  return unwrap<{
+    user_id: number;
+    role: string;
+    cities: number[];
+    units: number[];
+    cities_detail: { id: number; name: string; state: string }[];
+  }>(apiRequest('/ess/access'));
+}
+
+export async function fetchCities() {
+  return unwrap<{ id: number; name: string; state: string }[]>(
+    apiRequest('/ess/filters?view=cities'),
+  );
 }
 
 // ===== Profile =====

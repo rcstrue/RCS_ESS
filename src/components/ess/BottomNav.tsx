@@ -4,8 +4,6 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Separator } from '@/components/ui/separator';
 import { ChevronRight, LogOut } from 'lucide-react';
 import { NAV_ITEMS, MORE_MENU_ITEMS } from './constants';
-import type { EmployeeRole } from '@/lib/ess-types';
-import { canViewDirectory } from './helpers';
 
 // ══════════════════════════════════════════════════════════════
 // Bottom Navigation Bar
@@ -16,13 +14,13 @@ interface BottomNavProps {
   showMoreMenu: boolean;
   setShowMoreMenu: (open: boolean) => void;
   onNavigate: (page: string) => void;
-  role: EmployeeRole;
   isInstalled: boolean;
+  canViewDirectory: boolean;
 }
 
-export default function BottomNav({ currentPage, showMoreMenu, setShowMoreMenu, onNavigate, role, isInstalled }: BottomNavProps) {
+export default function BottomNav({ currentPage, showMoreMenu, setShowMoreMenu, onNavigate, isInstalled, canViewDirectory: canViewDir }: BottomNavProps) {
   const filteredNavItems = NAV_ITEMS.filter((item) => {
-    if (item.key === 'directory') return canViewDirectory(role);
+    if (item.key === 'directory') return canViewDir;
     return true;
   });
 
