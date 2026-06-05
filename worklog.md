@@ -551,3 +551,27 @@ Stage Summary:
 - Root cause: Temporal Dead Zone error from forward-referencing const variables in usePullToRefresh hook calls
 - Fix: Reordered code to declare callbacks before hook calls in all 7 affected pages
 - Pushed to GitHub: https://github.com/rcstrue/RCS_ESS.git (commit 2a6c3eb)
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Implement role-based employee visibility with payroll access allocation
+
+Work Log:
+- Analyzed existing role system: hardcoded helpers.ts (canViewDirectory, getScope, canApprove), scope-based backend filtering
+- Created AccessContext with useAccess hook providing permission helpers (canViewEmployee, canViewAttendance, etc.)
+- Created PHP backend api/ess/access.php endpoint that:
+  - Auto-creates ess_cities and ess_access_allocations tables
+  - Seeds cities from distinct units.city values
+  - Backfills city_id column on units table
+  - Returns allocation or falls back to employee's own city/unit
+- Updated employees.php to accept city_ids/unit_ids for server-side access filtering
+- Updated filters.php with view=cities endpoint
+- Updated ESSApp to wrap with AccessProvider, fetch access on login, clear on logout
+- Updated DirectoryPage with city filter dropdown, CSV export, access-based API params
+- Updated BottomNav to use access.canViewDirectory() instead of hardcoded role check
+
+Stage Summary:
+- 9 files changed, 797 insertions, 24 deletions
+- Committed as c80d261, pushed to GitHub
+- Key files: api/ess/access.php, src/contexts/AccessContext.tsx, src/lib/access-types.ts
