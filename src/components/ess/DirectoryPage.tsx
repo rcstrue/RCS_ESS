@@ -230,12 +230,25 @@ export default function DirectoryPage({
     loadFilters();
   }, [loadFilters]);
 
-  // Only load employees when user actually searches or filters (not on mount)
+  // Auto-load employees on mount for non-employee roles (supervisor/manager/admin)
+  // For employee role ('self'), require manual search/filter
+  const isAccessControlled = accessLevel === 'full' || accessLevel === 'city' || accessLevel === 'unit';
   const hasSearchOrFilter = searchQuery || (selectedClient && selectedClient !== 'all_clients') || (selectedUnit && selectedUnit !== 'all_units');
   const filterKey = `${searchQuery}|${selectedClient}|${selectedUnit}|${page}`;
+
+  // Auto-load on mount for access-controlled roles
   useEffect(() => {
-    if (hasSearchOrFilter) {
+    if (isAccessControlled) {
       loadEmployees();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-load when search/filter changes
+  useEffect(() => {
+    if (isAccessControlled || hasSearchOrFilter) {
+      if (searchedOnce || isAccessControlled) {
+        loadEmployees();
+      }
     }
   }, [filterKey]);
 

@@ -3,8 +3,13 @@
  * ESS API — Access Allocation Endpoint
  * GET: Returns the logged-in user's access allocation from payroll system.
  *
+ * Reads from the payroll-driven `employee_city_allocations` table where:
+ *   allocation_type = 'unit'  → unit-level access (supervisor)
+ *   allocation_type = 'city'  → city-level access (manager)
+ *
  * Access levels:
  *   admin            → full access (all employees, all cities, all units)
+ *   regional_manager → full access
  *   manager          → assigned cities → can view all employees in those cities
  *   supervisor       → assigned units  → can view only employees in those units
  *   employee         → self only
@@ -24,21 +29,9 @@ try {
     $employeeId = requireAuth();
     $conn = getDbConnection();
 
-    // ─── Auto-create table if not exists ──────────────────────────────
-    $conn->query("
-        CREATE TABLE IF NOT EXISTS ess_access_allocations (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            employee_id INT NOT NULL,
-            role VARCHAR(50) NOT NULL DEFAULT 'employee',
-            cities JSON NOT NULL CHECK (JSON_VALID(cities)),
-            units JSON NOT NULL CHECK (JSON_VALID(units)),
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY uk_employee (employee_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    ");
+    // ─── Auto-create tables if not exist ──────────────────────────────
 
-    // ─── Auto-create cities table if not exists ───────────────────────
+    // Cities lookup table
     $conn->query("
         CREATE TABLE IF NOT EXISTS ess_cities (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -50,22 +43,19 @@ try {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     ");
 
-    // ─── Seed cities from existing units table ───────────────────────
-    $seedStmt = $conn->query("
+    // Seed cities from existing units table
+    $conn->query("
         INSERT IGNORE INTO ess_cities (name, state)
         SELECT DISTINCT u.city, COALESCE(u.state, '')
         FROM units u
         WHERE u.city IS NOT NULL AND u.city != '' AND u.is_active = 1
     ");
 
-    // ─── Backfill city_id column on units table ──────────────────────
-    // Add city_id column if it doesn't exist
+    // Backfill city_id column on units table
     $colCheck = $conn->query("SHOW COLUMNS FROM units LIKE 'city_id'");
     if ($colCheck->num_rows === 0) {
         $conn->query("ALTER TABLE units ADD COLUMN city_id INT NULL AFTER city");
     }
-
-    // Link units to cities by name
     $conn->query("
         UPDATE units u
         INNER JOIN ess_cities c ON c.name = u.city
@@ -73,75 +63,156 @@ try {
         WHERE u.city_id IS NULL AND u.city IS NOT NULL AND u.city != ''
     ");
 
-    // ─── Get user's role from employee_cache ──────────────────────────
-    $cacheStmt = $conn->prepare('SELECT role FROM ess_employee_cache WHERE employee_id = ?');
+    // ─── Auto-create payroll allocation table if not exists ──────────
+    $conn->query("
+        CREATE TABLE IF NOT EXISTS employee_city_allocations (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            employee_id INT NOT NULL,
+            allocation_type VARCHAR(50) NOT NULL DEFAULT 'unit',
+            allocation_value VARCHAR(255) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_employee (employee_id),
+            INDEX idx_type (allocation_type)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    ");
+
+    // ─── Get user's base role from employee_cache ─────────────────────
+    $cacheStmt = $conn->prepare('SELECT role, unit_id, client_id FROM ess_employee_cache WHERE employee_id = ?');
     $cacheStmt->bind_param('s', $employeeId);
     $cacheStmt->execute();
     $cacheRow = $cacheStmt->get_result()->fetch_assoc();
     $cacheStmt->close();
 
-    $role = $cacheRow ? $cacheRow['role'] : 'employee';
+    $baseRole = $cacheRow ? $cacheRow['role'] : 'employee';
 
-    // ─── Check for explicit access allocation ─────────────────────────
-    $accessStmt = $conn->prepare('SELECT role, cities, units FROM ess_access_allocations WHERE employee_id = ?');
-    $accessStmt->bind_param('s', $employeeId);
-    $accessStmt->execute();
-    $accessRow = $accessStmt->get_result()->fetch_assoc();
-    $accessStmt->close();
-
-    $cities = array();
-    $units = array();
-
-    if ($accessRow) {
-        // Explicit allocation from payroll exists
-        $role = $accessRow['role']; // Use payroll-assigned role
-        $cities = json_decode($accessRow['cities'], true) ?: array();
-        $units = json_decode($accessRow['units'], true) ?: array();
-    } else {
-        // No explicit allocation — derive from employee's own assignment
-        if ($role === 'admin' || $role === 'regional_manager') {
-            // Full access — cities and units stay empty (means "all")
-        } elseif ($role === 'manager' || $role === 'field_officer') {
-            // Manager — give access to their own city
-            $empStmt = $conn->prepare('SELECT u.city_id FROM ess_employee_cache ec JOIN units u ON u.id = ec.unit_id WHERE ec.employee_id = ?');
-            $empStmt->bind_param('s', $employeeId);
-            $empStmt->execute();
-            $empRow = $empStmt->get_result()->fetch_assoc();
-            $empStmt->close();
-            if ($empRow && $empRow['city_id']) {
-                $cities = array((int)$empRow['city_id']);
-            }
-        } elseif ($role === 'supervisor') {
-            // Supervisor — give access to their own unit
-            $empStmt = $conn->prepare('SELECT unit_id FROM ess_employee_cache WHERE employee_id = ?');
-            $empStmt->bind_param('s', $employeeId);
-            $empStmt->execute();
-            $empRow = $empStmt->get_result()->fetch_assoc();
-            $empStmt->close();
-            if ($empRow && $empRow['unit_id']) {
-                $units = array((int)$empRow['unit_id']);
-            }
-        }
-        // employee role → cities and units stay empty (means "self only")
+    // ─── Admin / Regional Manager → full access immediately ───────────
+    if ($baseRole === 'admin' || $baseRole === 'regional_manager') {
+        jsonOutput(array(
+            'success' => true,
+            'data' => array(
+                'user_id' => (int)$employeeId,
+                'role' => $baseRole,
+                'cities' => array(),
+                'units' => array(),
+                'cities_detail' => array(),
+            )
+        ));
+        return;
     }
 
-    // ─── Fetch city details (name, state) for assigned cities ────────
-    $citiesDetail = array();
-    if (!empty($cities) && $role !== 'admin' && $role !== 'regional_manager') {
-        $placeholders = implode(',', array_fill(0, count($cities), '?'));
-        $cityStmt = $conn->prepare("SELECT id, name, state FROM ess_cities WHERE id IN ($placeholders) AND is_active = 1 ORDER BY name");
-        $types = str_repeat('i', count($cities));
-        bindDynamicParams($cityStmt, $types, $cities);
+    // ─── Read payroll allocations from employee_city_allocations ──────
+    $allocStmt = $conn->prepare('
+        SELECT allocation_type, allocation_value
+        FROM employee_city_allocations
+        WHERE employee_id = ?
+    ');
+    $allocStmt->bind_param('s', $employeeId);
+    $allocStmt->execute();
+    $allocResult = $allocStmt->get_result();
+
+    $cityNames = array();
+    $unitNames = array();
+    while ($row = $allocResult->fetch_assoc()) {
+        $type = strtolower(trim($row['allocation_type']));
+        $value = trim($row['allocation_value']);
+        if ($type === 'city' && $value !== '') {
+            $cityNames[] = $value;
+        } elseif ($type === 'unit' && $value !== '') {
+            $unitNames[] = $value;
+        }
+    }
+    $allocStmt->close();
+
+    // ─── Convert unit names → unit IDs ─────────────────────────────────
+    $unitIds = array();
+    if (!empty($unitNames)) {
+        $placeholders = implode(',', array_fill(0, count($unitNames), '?'));
+        $unitStmt = $conn->prepare("SELECT id FROM units WHERE name IN ($placeholders) AND is_active = 1");
+        $types = str_repeat('s', count($unitNames));
+        bindDynamicParams($unitStmt, $types, $unitNames);
+        $unitStmt->execute();
+        $unitResult = $unitStmt->get_result();
+        while ($row = $unitResult->fetch_assoc()) {
+            $unitIds[] = (int)$row['id'];
+        }
+        $unitStmt->close();
+    }
+
+    // ─── Convert city names → city IDs ─────────────────────────────────
+    $cityIds = array();
+    if (!empty($cityNames)) {
+        $placeholders = implode(',', array_fill(0, count($cityNames), '?'));
+        $cityStmt = $conn->prepare("SELECT id FROM ess_cities WHERE name IN ($placeholders) AND is_active = 1");
+        $types = str_repeat('s', count($cityNames));
+        bindDynamicParams($cityStmt, $types, $cityNames);
         $cityStmt->execute();
         $cityResult = $cityStmt->get_result();
         while ($row = $cityResult->fetch_assoc()) {
+            $cityIds[] = (int)$row['id'];
+        }
+        $cityStmt->close();
+    }
+
+    // ─── Also get city IDs from units (units → cities mapping) ────────
+    // If user has unit allocations, we can derive their city IDs from those units
+    $cityIdsFromUnits = array();
+    if (!empty($unitIds)) {
+        $placeholders = implode(',', array_fill(0, count($unitIds), '?'));
+        $cityFromUnitStmt = $conn->prepare("
+            SELECT DISTINCT u.city_id, c.id, c.name, c.state
+            FROM units u
+            LEFT JOIN ess_cities c ON c.id = u.city_id
+            WHERE u.id IN ($placeholders) AND u.city_id IS NOT NULL
+        ");
+        $types = str_repeat('i', count($unitIds));
+        bindDynamicParams($cityFromUnitStmt, $types, $unitIds);
+        $cityFromUnitStmt->execute();
+        $cityFromUnitResult = $cityFromUnitStmt->get_result();
+        while ($row = $cityFromUnitResult->fetch_assoc()) {
+            $cid = (int)$row['id'];
+            if ($cid && !in_array($cid, $cityIds)) {
+                $cityIds[] = $cid;
+            }
+        }
+        $cityFromUnitStmt->close();
+    }
+
+    // ─── Determine effective role ──────────────────────────────────────
+    $role = $baseRole;
+    if (!empty($cityNames) && !empty($unitNames)) {
+        // Has both city and unit allocations → treat as manager (broader access)
+        $role = 'manager';
+    } elseif (!empty($cityNames)) {
+        // City allocations only → manager
+        $role = 'manager';
+    } elseif (!empty($unitNames)) {
+        // Unit allocations only → supervisor
+        $role = 'supervisor';
+    }
+    // else: no allocations → keep base role (employee or whatever cache says)
+
+    // ─── Fetch city details for frontend display ──────────────────────
+    $citiesDetail = array();
+    if (!empty($cityIds)) {
+        $placeholders = implode(',', array_fill(0, count($cityIds), '?'));
+        $cityDetailStmt = $conn->prepare("
+            SELECT id, name, state
+            FROM ess_cities
+            WHERE id IN ($placeholders) AND is_active = 1
+            ORDER BY name
+        ");
+        $types = str_repeat('i', count($cityIds));
+        bindDynamicParams($cityDetailStmt, $types, $cityIds);
+        $cityDetailStmt->execute();
+        $cityDetailResult = $cityDetailStmt->get_result();
+        while ($row = $cityDetailResult->fetch_assoc()) {
             $citiesDetail[] = array(
                 'id' => (int)$row['id'],
                 'name' => $row['name'],
                 'state' => $row['state'] ?? '',
             );
         }
-        $cityStmt->close();
+        $cityDetailStmt->close();
     }
 
     jsonOutput(array(
@@ -149,8 +220,8 @@ try {
         'data' => array(
             'user_id' => (int)$employeeId,
             'role' => $role,
-            'cities' => array_map('intval', $cities),
-            'units' => array_map('intval', $units),
+            'cities' => $cityIds,
+            'units' => $unitIds,
             'cities_detail' => $citiesDetail,
         )
     ));
