@@ -155,11 +155,6 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
   // Status filter
   const [statusFilter, setStatusFilter] = useState('all');
 
-  // Pull-to-refresh
-  const pullRefresh = usePullToRefresh<HTMLDivElement>({
-    onRefresh: loadAttendance,
-  });
-
   // CSV Export
   const { exportCSV } = useExportCSV();
 
@@ -234,6 +229,11 @@ export default function AttendancePage({ employeeId, employeeName, role }: Atten
       setLoading(false);
     }
   }, [employeeId, navDate]);
+
+  // Pull-to-refresh (after loadAttendance is defined to avoid TDZ)
+  const pullRefresh = usePullToRefresh<HTMLDivElement>({
+    onRefresh: loadAttendance,
+  });
 
   useEffect(() => {
     loadAttendance();

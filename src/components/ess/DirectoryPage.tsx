@@ -142,11 +142,6 @@ export default function DirectoryPage({
   const [profileLoading, setProfileLoading] = useState(false);
   const [viewingDoc, setViewingDoc] = useState<{ url: string; title: string } | null>(null);
 
-  // Pull-to-refresh
-  const pullRefresh = usePullToRefresh<HTMLDivElement>({
-    onRefresh: loadEmployees,
-  });
-
   // ── Load filter options ──
   const loadFilters = useCallback(async () => {
     setFiltersLoading(true);
@@ -196,6 +191,11 @@ export default function DirectoryPage({
       setLoading(false);
     }
   }, [scope, employeeId, page, searchQuery, selectedClient, selectedUnit]);
+
+  // Pull-to-refresh (after loadEmployees is defined to avoid TDZ)
+  const pullRefresh = usePullToRefresh<HTMLDivElement>({
+    onRefresh: loadEmployees,
+  });
 
   useEffect(() => {
     loadFilters();

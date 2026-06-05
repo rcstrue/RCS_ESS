@@ -213,11 +213,6 @@ export function ExpensesPage({
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Pull-to-refresh
-  const pullRefresh = usePullToRefresh<HTMLDivElement>({
-    onRefresh: () => { loadMyExpenses(selectedMonth); loadAdvanceAllocations(); },
-  });
-
   // CSV Export
   const { exportCSV } = useExportCSV();
 
@@ -277,6 +272,11 @@ export function ExpensesPage({
       setIsLoadingMy(false);
     }
   }, [employeeId]);
+
+  // Pull-to-refresh (after load functions are defined to avoid TDZ)
+  const pullRefresh = usePullToRefresh<HTMLDivElement>({
+    onRefresh: () => { loadMyExpenses(selectedMonth); loadAdvanceAllocations(); },
+  });
 
   // Load month data whenever month changes (needed for both tabs)
   useEffect(() => {

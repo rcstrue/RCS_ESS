@@ -137,11 +137,6 @@ export default function LeavesPage({
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [cancelTargetId, setCancelTargetId] = useState<number | null>(null);
 
-  // Pull-to-refresh
-  const pullRefresh = usePullToRefresh<HTMLDivElement>({
-    onRefresh: refreshAll,
-  });
-
   // CSV Export
   const { exportCSV } = useExportCSV();
 
@@ -293,6 +288,11 @@ export default function LeavesPage({
       loadPendingTeamRequests();
     }
   };
+
+  // Pull-to-refresh (after refreshAll is defined to avoid TDZ)
+  const pullRefresh = usePullToRefresh<HTMLDivElement>({
+    onRefresh: refreshAll,
+  });
 
   // ─── Apply leave ─────────────────────────────────────────────
   const handleApplyLeave = async () => {

@@ -157,11 +157,6 @@ export default function HelpdeskPage({ employeeId, employeeName = 'Employee' }: 
   const [formDescription, setFormDescription] = useState('');
   const [formPriority, setFormPriority] = useState('medium');
 
-  // Pull-to-refresh
-  const pullRefresh = usePullToRefresh<HTMLDivElement>({
-    onRefresh: loadTickets,
-  });
-
   // ── Fetch tickets ──
   const loadTickets = useCallback(async () => {
     setLoading(true);
@@ -181,6 +176,11 @@ export default function HelpdeskPage({ employeeId, employeeName = 'Employee' }: 
       setLoading(false);
     }
   }, [employeeId, activeFilter]);
+
+  // Pull-to-refresh (after loadTickets is defined to avoid TDZ)
+  const pullRefresh = usePullToRefresh<HTMLDivElement>({
+    onRefresh: loadTickets,
+  });
 
   useEffect(() => {
     loadTickets();

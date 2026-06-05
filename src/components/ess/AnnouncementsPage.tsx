@@ -108,11 +108,6 @@ export default function AnnouncementsPage({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Pull-to-refresh
-  const pullRefresh = usePullToRefresh<HTMLDivElement>({
-    onRefresh: loadAnnouncements,
-  });
-
   // ── Form state ──
   const [formTitle, setFormTitle] = useState('');
   const [formContent, setFormContent] = useState('');
@@ -138,6 +133,11 @@ export default function AnnouncementsPage({
       setLoading(false);
     }
   }, []);
+
+  // Pull-to-refresh (after loadAnnouncements is defined to avoid TDZ)
+  const pullRefresh = usePullToRefresh<HTMLDivElement>({
+    onRefresh: loadAnnouncements,
+  });
 
   useEffect(() => {
     loadAnnouncements();

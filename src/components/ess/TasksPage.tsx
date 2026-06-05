@@ -145,11 +145,6 @@ export function TasksPage({ employeeId, employeeName, role, canApprove }: TasksP
   const [commentText, setCommentText] = useState('');
   const [comments, setComments] = useState<TaskComment[]>([]);
 
-  // Pull-to-refresh
-  const pullRefresh = usePullToRefresh<HTMLDivElement>({
-    onRefresh: loadTasks,
-  });
-
   // CSV Export
   const { exportCSV } = useExportCSV();
 
@@ -197,6 +192,11 @@ export function TasksPage({ employeeId, employeeName, role, canApprove }: TasksP
       setIsLoading(false);
     }
   }, [employeeId, canApprove]);
+
+  // Pull-to-refresh (after loadTasks is defined to avoid TDZ)
+  const pullRefresh = usePullToRefresh<HTMLDivElement>({
+    onRefresh: loadTasks,
+  });
 
   // ── Fetch team employees ──
   const loadTeamEmployees = useCallback(async () => {
