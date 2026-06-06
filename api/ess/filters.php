@@ -225,28 +225,40 @@ function _handleClients(): void
 
     $scope = $_GET['scope'] ?? 'all';
     $search = trim($_GET['q'] ?? '');
+    $unitIds = isset($_GET['unit_ids']) ? array_map('intval', explode(',', $_GET['unit_ids'])) : [];
+    $unitIds = array_filter($unitIds, function($v) { return $v > 0; });
 
-    $query = 'SELECT id, client_code, name, is_active FROM clients WHERE 1=1';
+    $query = 'SELECT DISTINCT c.id, c.client_code, c.name, c.is_active
+              FROM clients c';
     $types = '';
     $params = [];
 
+    // If unit_ids provided, only show clients that have units in the allocation
+    if (!empty($unitIds)) {
+        $query .= ' INNER JOIN units u ON u.client_id = c.id AND u.id IN (' . implode(',', array_fill(0, count($unitIds), '?')) . ')';
+        $types .= str_repeat('i', count($unitIds));
+        $params = array_merge($params, $unitIds);
+    }
+
+    $query .= ' WHERE 1=1';
+
     // If search is provided, filter by name
     if (!empty($search)) {
-        $query .= ' AND name LIKE ?';
+        $query .= ' AND c.name LIKE ?';
         $types .= 's';
         $params[] = '%' . $search . '%';
     }
 
     // Active only if not explicitly requesting all
     if ($scope !== 'all') {
-        $query .= ' AND is_active = 1';
+        $query .= ' AND c.is_active = 1';
     }
 
-    $query .= ' ORDER BY name ASC';
+    $query .= ' ORDER BY c.name ASC';
 
     $stmt = $conn->prepare($query);
     if (!empty($params)) {
-        $stmt->bind_param($types, ...$params);
+        bindDynamicParams($stmt, $types, $params);
     }
     $stmt->execute();
     $result = $stmt->get_result();
@@ -274,6 +286,8 @@ function _handleUnits(): void
 
     $clientId = $_GET['client_id'] ?? '';
     $scope = $_GET['scope'] ?? 'all';
+    $unitIds = isset($_GET['unit_ids']) ? array_map('intval', explode(',', $_GET['unit_ids'])) : [];
+    $unitIds = array_filter($unitIds, function($v) { return $v > 0; });
 
     $query = 'SELECT u.id, u.client_id, u.name, u.city, u.state, u.is_active, c.name AS client_name
               FROM units u
@@ -281,6 +295,13 @@ function _handleUnits(): void
               WHERE 1=1';
     $types = '';
     $params = [];
+
+    // If unit_ids provided (access allocation), restrict to those units
+    if (!empty($unitIds)) {
+        $query .= ' AND u.id IN (' . implode(',', array_fill(0, count($unitIds), '?')) . ')';
+        $types .= str_repeat('i', count($unitIds));
+        $params = array_merge($params, $unitIds);
+    }
 
     if (!empty($clientId)) {
         $query .= ' AND u.client_id = ?';
@@ -296,7 +317,7 @@ function _handleUnits(): void
 
     $stmt = $conn->prepare($query);
     if (!empty($params)) {
-        $stmt->bind_param($types, ...$params);
+        bindDynamicParams($stmt, $types, $params);
     }
     $stmt->execute();
     $result = $stmt->get_result();

@@ -159,15 +159,16 @@ export default function DirectoryPage({
   const [profileLoading, setProfileLoading] = useState(false);
   const [viewingDoc, setViewingDoc] = useState<{ url: string; title: string } | null>(null);
 
-  // ── Load filter options ──
+  // ── Load filter options (filtered by access allocation) ──
   const loadFilters = useCallback(async () => {
     setFiltersLoading(true);
     try {
       const promises: Promise<void>[] = [
-        fetchClients(scope, employeeId).then((r) => {
+        // Pass unit_ids so only allocated clients/units show
+        fetchClients(scope, employeeId, unitIds.length > 0 ? unitIds : undefined).then((r) => {
           setClients(Array.isArray(r?.data) ? r.data : []);
         }),
-        fetchUnits(scope, employeeId).then((r) => {
+        fetchUnits(scope, employeeId, undefined, unitIds.length > 0 ? unitIds : undefined).then((r) => {
           setUnits(Array.isArray(r?.data) ? r.data : []);
         }),
       ];
@@ -185,7 +186,7 @@ export default function DirectoryPage({
     } finally {
       setFiltersLoading(false);
     }
-  }, [scope, employeeId, accessLevel]);
+  }, [scope, employeeId, accessLevel, unitIds]);
 
   // ── Load employees (only after user applies a filter or search) ──
   const loadEmployees = useCallback(async () => {
@@ -202,8 +203,10 @@ export default function DirectoryPage({
         client_id: selectedClient ? Number(selectedClient) : undefined,
         unit_id: selectedUnit ? Number(selectedUnit) : undefined,
         // Access allocation from payroll (server-side filtering)
-        city_ids: cityIds.length > 0 ? cityIds : undefined,
+        // Only send unit_ids for supervisors (unit-level is more precise)
+        // Only send city_ids for managers without unit allocations
         unit_ids: unitIds.length > 0 ? unitIds : undefined,
+        city_ids: (cityIds.length > 0 && unitIds.length === 0) ? cityIds : undefined,
       });
       if (fetchError) {
         toast.error(fetchError);

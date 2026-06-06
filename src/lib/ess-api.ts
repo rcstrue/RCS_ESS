@@ -221,18 +221,20 @@ export async function createAnnouncement(data: { title: string; content: string;
 }
 
 // ===== Filters =====
-export async function fetchClients(scope?: string, requester_id?: number) {
+export async function fetchClients(scope?: string, requester_id?: number, unit_ids?: number[]) {
   const params = new URLSearchParams();
   if (scope) params.set('scope', scope);
   if (requester_id) params.set('requester_id', String(requester_id));
+  if (unit_ids?.length) params.set('unit_ids', unit_ids.join(','));
   return unwrap<ClientOption[]>(apiRequest<ClientOption[]>(`/ess/filters?view=clients&${params}`));
 }
 
-export async function fetchUnits(scope?: string, requester_id?: number, client_id?: number) {
+export async function fetchUnits(scope?: string, requester_id?: number, client_id?: number, unit_ids?: number[]) {
   const params = new URLSearchParams();
   if (scope) params.set('scope', scope);
   if (requester_id) params.set('requester_id', String(requester_id));
   if (client_id) params.set('client_id', String(client_id));
+  if (unit_ids?.length) params.set('unit_ids', unit_ids.join(','));
   return unwrap<UnitOption[]>(apiRequest<UnitOption[]>(`/ess/filters?view=units&${params}`));
 }
 

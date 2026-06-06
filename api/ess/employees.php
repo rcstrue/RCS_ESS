@@ -1,12 +1,16 @@
 <?php
 /**
  * ESS API — Employee Directory Endpoint
- * GET: Search/filter employees
- *   scope: team (same unit/client), unit, all
- *   role_filter: all, managers, admin (filter by role)
- *   q: search query (name, code, mobile)
- *   client_id, unit_id: filter by client/unit
- *   page, limit: pagination
+ * GET: Search/filter employees with role-based access control
+ *
+ * Access allocation filtering:
+ *   - unit_ids  → filter by e.unit_id (supervisor)
+ *   - city_ids  → filter by u.city_id (manager, requires JOIN)
+ *   - When BOTH are provided → use OR (union of access)
+ *   - When NONE are provided → show all approved (admin/legacy)
+ *
+ * Params: scope, q, client_id, unit_id, department, city_ids, unit_ids,
+ *         role_filter, page, limit
  */
 
 require_once __DIR__ . '/config.php';
@@ -32,6 +36,9 @@ try {
     // Access allocation params (sent from frontend useAccess hook)
     $cityIds = isset($_GET['city_ids']) ? array_map('intval', explode(',', $_GET['city_ids'])) : array();
     $unitIds = isset($_GET['unit_ids']) ? array_map('intval', explode(',', $_GET['unit_ids'])) : array();
+    // Filter out zeros
+    $cityIds = array_values(array_filter($cityIds, function($v) { return $v > 0; }));
+    $unitIds = array_values(array_filter($unitIds, function($v) { return $v > 0; }));
 
     // ─── Build Base Query ─────────────────────────────────────────────────
     $whereClause = 'WHERE e.status = ?';
@@ -44,21 +51,38 @@ try {
     } elseif ($roleFilter === 'admin') {
         $whereClause .= " AND e.employee_role = 'admin'";
     }
-    // 'all' = no role filter (default)
 
     // ─── Access allocation filtering (payroll-driven) ───────────────
-    // If city_ids or unit_ids are provided, enforce server-side access
+    // Build access filter clause separately — may need JOIN
+    $accessFilter = '';
+    $accessTypes = '';
+    $accessParams = array();
+    $needsUnitsJoin = false;
+
     if (!empty($cityIds)) {
+        $needsUnitsJoin = true;
         $cityPlaceholders = implode(',', array_fill(0, count($cityIds), '?'));
-        $whereClause .= " AND u.city_id IN ($cityPlaceholders)";
-        $types .= str_repeat('i', count($cityIds));
-        $params = array_merge($params, $cityIds);
+        $accessFilter .= "u.city_id IN ($cityPlaceholders)";
+        $accessTypes .= str_repeat('i', count($cityIds));
+        $accessParams = array_merge($accessParams, $cityIds);
     }
+
     if (!empty($unitIds)) {
+        if (!empty($accessFilter)) {
+            // Both city and unit access → use OR (union of both access scopes)
+            $accessFilter .= ' OR ';
+        }
         $unitPlaceholders = implode(',', array_fill(0, count($unitIds), '?'));
-        $whereClause .= " AND e.unit_id IN ($unitPlaceholders)";
-        $types .= str_repeat('i', count($unitIds));
-        $params = array_merge($params, $unitIds);
+        $accessFilter .= "e.unit_id IN ($unitPlaceholders)";
+        $accessTypes .= str_repeat('i', count($unitIds));
+        $accessParams = array_merge($accessParams, $unitIds);
+    }
+
+    // Apply access filter
+    if (!empty($accessFilter)) {
+        $whereClause .= " AND ({$accessFilter})";
+        $types .= $accessTypes;
+        $params = array_merge($params, $accessParams);
     }
 
     // Scope-based filtering (legacy fallback when no access allocation)
@@ -141,11 +165,17 @@ try {
         $params[] = $department;
     }
 
+    // ─── Build JOIN clause ───────────────────────────────────────────
+    $joinClause = 'LEFT JOIN clients c ON c.id = e.client_id';
+    if ($needsUnitsJoin) {
+        $joinClause .= ' LEFT JOIN units u ON u.id = e.unit_id';
+    }
+
     // ─── Count ───────────────────────────────────────────────────────────
-    $countQuery = "SELECT COUNT(*) AS total FROM employees e {$whereClause}";
+    $countQuery = "SELECT COUNT(*) AS total FROM employees e {$joinClause} {$whereClause}";
     $countStmt = $conn->prepare($countQuery);
     if (!$countStmt) {
-        jsonOutput(array('success' => false, 'error' => 'Database query error'), 500);
+        jsonOutput(array('success' => false, 'error' => 'Database query error: ' . $conn->error), 500);
         return;
     }
     bindDynamicParams($countStmt, $types, $params);
@@ -153,19 +183,24 @@ try {
     $total = (int)$countStmt->get_result()->fetch_assoc()['total'];
     $countStmt->close();
 
-    // ─── Data Query — city/state from units table ────────────────────────
+    // ─── Data Query ─────────────────────────────────────────────────────
+    // Always join units for unit_name/city display
+    $dataJoin = $joinClause;
+    if (!$needsUnitsJoin) {
+        $dataJoin .= ' LEFT JOIN units u ON u.id = e.unit_id';
+    }
+
     $dataQuery = "
         SELECT
             e.id AS emp_id, e.full_name, e.mobile_number, e.email,
             e.designation, e.department, e.employee_code, e.profile_pic_url,
             e.state AS emp_state, e.date_of_joining, e.employee_role, e.app_role,
-            e.status AS emp_status,
-            c.name AS client_name,
+            e.status AS emp_status, e.unit_id AS emp_unit_id,
+            c.name AS client_name, c.id AS emp_client_id,
             u.name AS unit_name,
             u.city AS emp_city
         FROM employees e
-        LEFT JOIN clients c ON c.id = e.client_id
-        LEFT JOIN units u ON u.id = e.unit_id
+        {$dataJoin}
         {$whereClause}
         ORDER BY e.full_name ASC
         LIMIT ? OFFSET ?
@@ -177,7 +212,7 @@ try {
 
     $stmt = $conn->prepare($dataQuery);
     if (!$stmt) {
-        jsonOutput(array('success' => false, 'error' => 'Database query error'), 500);
+        jsonOutput(array('success' => false, 'error' => 'Database query error: ' . $conn->error), 500);
         return;
     }
     bindDynamicParams($stmt, $dataTypes, $dataParams);
@@ -204,6 +239,8 @@ try {
             'status' => isset($row['emp_status']) ? $row['emp_status'] : '',
             'client_name' => isset($row['client_name']) ? $row['client_name'] : '',
             'unit_name' => isset($row['unit_name']) ? $row['unit_name'] : '',
+            'client_id' => isset($row['emp_client_id']) ? (int)$row['emp_client_id'] : 0,
+            'unit_id' => isset($row['emp_unit_id']) ? (int)$row['emp_unit_id'] : 0,
         );
     }
     $stmt->close();
