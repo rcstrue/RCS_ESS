@@ -18,23 +18,16 @@ import type {
   CityOption,
 } from '@/lib/access-types';
 import { ACCESS_STORAGE_KEY } from '@/lib/access-types';
-import { apiRequest } from '@/lib/api/config';
-import type { EmployeeRole } from '@/lib/ess-types';
+import { fetchAccessAllocation } from '@/lib/ess-api';
 
 // ══════════════════════════════════════════════════════════════
-// API Layer
+// API Layer — uses fetchAccessAllocation from ess-api.ts which
+// properly unwraps the PHP { success, data } envelope
 // ══════════════════════════════════════════════════════════════
 
 async function fetchAccessFromServer(): Promise<AccessAllocation | null> {
   try {
-    const { data, error } = await apiRequest<{
-      user_id: number;
-      role: EmployeeRole;
-      cities: number[];
-      units: number[];
-      cities_detail: { id: number; name: string; state: string }[];
-    }>('/ess/access');
-
+    const { data, error } = await fetchAccessAllocation();
     if (error || !data) return null;
 
     return {
@@ -52,12 +45,19 @@ async function fetchAccessFromServer(): Promise<AccessAllocation | null> {
 // localStorage helpers
 // ══════════════════════════════════════════════════════════════
 
+const ACCESS_SCHEMA_VERSION = 2;
+
 function loadAccessFromStorage(): AccessState | null {
   if (typeof window === 'undefined') return null;
   try {
     const stored = localStorage.getItem(ACCESS_STORAGE_KEY);
     if (!stored) return null;
     const parsed = JSON.parse(stored) as AccessState;
+    // Force-clear old schema versions (broken unwrap bug)
+    if (!parsed.version || parsed.version < ACCESS_SCHEMA_VERSION) {
+      localStorage.removeItem(ACCESS_STORAGE_KEY);
+      return null;
+    }
     // Consider stale after 24 hours
     const age = Date.now() - new Date(parsed.fetchedAt).getTime();
     if (age > 24 * 60 * 60 * 1000) {
@@ -198,6 +198,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
           scopeLabel: getScopeLabel(data.role, data.cities, data.units),
           fetchedAt: new Date().toISOString(),
           isValid: true,
+          version: ACCESS_SCHEMA_VERSION,
         };
         setState(newState);
         saveAccessToStorage(newState);
@@ -213,6 +214,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
             scopeLabel: 'Unknown',
             fetchedAt: new Date().toISOString(),
             isValid: false,
+            version: ACCESS_SCHEMA_VERSION,
           });
         }
       }

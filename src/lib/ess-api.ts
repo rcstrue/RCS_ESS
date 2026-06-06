@@ -3,7 +3,7 @@ import type {
   LoginResponse, AttendanceRecord, AttendanceSummary,
   LeaveRequest, LeaveBalance, Task, Expense,
   HelpdeskTicket, Announcement, PaginatedResponse,
-  ClientOption, UnitOption, Employee, AdvanceAllocation
+  ClientOption, UnitOption, Employee, AdvanceAllocation, EmployeeRole
 } from './ess-types';
 
 // ══════════════════════════════════════════════════════════════
@@ -270,7 +270,7 @@ export async function fetchEmployees(params: {
 export async function fetchAccessAllocation() {
   return unwrap<{
     user_id: number;
-    role: string;
+    role: EmployeeRole;
     cities: number[];
     units: number[];
     cities_detail: { id: number; name: string; state: string }[];

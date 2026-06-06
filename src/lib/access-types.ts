@@ -23,6 +23,8 @@ export interface AccessState {
   fetchedAt: string;
   /** Whether access data is valid (not stale) */
   isValid: boolean;
+  /** Schema version — bump to force-clear stale cached data */
+  version: number;
 }
 
 /** Access level determining what a user can do */
