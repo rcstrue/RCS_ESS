@@ -251,7 +251,6 @@ export async function fetchEmployees(params: {
   q?: string;
   client_id?: number;
   unit_id?: number;
-  city_ids?: number[];
   unit_ids?: number[];
 }) {
   const searchParams = new URLSearchParams();
@@ -262,8 +261,7 @@ export async function fetchEmployees(params: {
   if (params.q) searchParams.set('q', params.q);
   if (params.client_id) searchParams.set('client_id', String(params.client_id));
   if (params.unit_id) searchParams.set('unit_id', String(params.unit_id));
-  // Access allocation params (payroll-driven city/unit filtering)
-  if (params.city_ids?.length) searchParams.set('city_ids', params.city_ids.join(','));
+  // Access allocation params (payroll-driven unit filtering)
   if (params.unit_ids?.length) searchParams.set('unit_ids', params.unit_ids.join(','));
   return unwrap<PaginatedResponse<Employee>>(apiRequest<PaginatedResponse<Employee>>(`/ess/employees?${searchParams}`));
 }

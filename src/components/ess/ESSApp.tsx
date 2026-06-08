@@ -338,9 +338,7 @@ function ESSAppInner({ onBackToRegistration }: { onBackToRegistration: () => voi
             role={role}
             scope={scope}
             accessLevel={access.accessLevel}
-            cityIds={access.allocation?.cities ?? []}
             unitIds={access.allocation?.units ?? []}
-            cityIdsParam={access.cityIdsParam}
             unitIdsParam={access.unitIdsParam}
           />
         )}

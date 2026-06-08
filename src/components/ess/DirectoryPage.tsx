@@ -69,9 +69,7 @@ interface DirectoryPageProps {
   role: string;
   scope: string;
   accessLevel: AccessLevel;
-  cityIds: number[];
   unitIds: number[];
-  cityIdsParam: string;
   unitIdsParam: string;
 }
 
@@ -124,9 +122,7 @@ export default function DirectoryPage({
   role,
   scope,
   accessLevel,
-  cityIds,
   unitIds,
-  cityIdsParam,
   unitIdsParam,
 }: DirectoryPageProps) {
   // ── State ──
@@ -181,12 +177,8 @@ export default function DirectoryPage({
     setError(null);
     setSearchedOnce(true);
     try {
-      // When access allocation (unitIds/cityIds) is provided, override scope to 'all'
-      // so the backend uses ONLY the access allocation filter and skips legacy scope logic
-      // which would restrict to the user's own unit only
-      const effectiveScope = (unitIds.length > 0 || cityIds.length > 0) ? 'all' : scope;
       const { data: res, error: fetchError } = await fetchEmployees({
-        scope: effectiveScope,
+        scope,
         requester_id: employeeId,
         page,
         limit: PAGE_SIZE,
@@ -194,10 +186,7 @@ export default function DirectoryPage({
         client_id: selectedClient ? Number(selectedClient) : undefined,
         unit_id: selectedUnit ? Number(selectedUnit) : undefined,
         // Access allocation from payroll (server-side filtering)
-        // Only send unit_ids for supervisors (unit-level is more precise)
-        // Only send city_ids for managers without unit allocations
         unit_ids: unitIds.length > 0 ? unitIds : undefined,
-        city_ids: (cityIds.length > 0 && unitIds.length === 0) ? cityIds : undefined,
       });
       if (fetchError) {
         toast.error(fetchError);
@@ -213,7 +202,7 @@ export default function DirectoryPage({
     } finally {
       setLoading(false);
     }
-  }, [scope, employeeId, page, searchQuery, selectedClient, selectedUnit, cityIds, unitIds]);
+  }, [scope, employeeId, page, searchQuery, selectedClient, selectedUnit, unitIds]);
 
   // Pull-to-refresh (after loadEmployees is defined to avoid TDZ)
   const pullRefresh = usePullToRefresh<HTMLDivElement>({
@@ -533,31 +522,35 @@ export default function DirectoryPage({
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
+          {searchedOnce && total > 0 && (
             <div className="flex items-center justify-center gap-2 pt-2">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
+              {totalPages > 1 && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+              )}
               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                 <span className="font-medium text-foreground">{page}</span>
                 <span>of</span>
                 <span className="font-medium text-foreground">{totalPages}</span>
               </div>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+              {totalPages > 1 && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              )}
             </div>
           )}
         </>

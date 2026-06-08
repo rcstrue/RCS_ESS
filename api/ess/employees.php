@@ -1,16 +1,14 @@
 <?php
 /**
  * ESS API — Employee Directory Endpoint
- * GET: Search/filter employees with role-based access control
+ * GET: Search/filter employees with access allocation filtering
  *
- * Access allocation filtering (from user_access table):
- *   - unit_ids  → filter by e.unit_id (manager/supervisor with unit allocations)
- *   - city_ids  → filter by u.city_id (regional_manager with city allocations)
- *   - When BOTH are provided → use OR (union of access)
- *   - When NONE are provided → show all approved (admin/legacy)
+ * Filtering:
+ *   - unit_ids  → filter by e.unit_id (from user_access table)
+ *   - When NONE provided → show all approved (admin)
  *
- * Params: scope, q, client_id, unit_id, department, city_ids, unit_ids,
- *         role_filter, page, limit
+ * Params: scope, q, client_id, unit_id, department, unit_ids,
+ *         page, limit
  */
 
 require_once __DIR__ . '/config.php';
@@ -26,7 +24,6 @@ try {
     $conn = getDbConnection();
 
     $scope = $_GET['scope'] ?? 'all';
-    $roleFilter = $_GET['role_filter'] ?? 'all';
     $search = trim($_GET['q'] ?? '');
     $clientId = $_GET['client_id'] ?? '';
     $unitId = $_GET['unit_id'] ?? '';
@@ -34,10 +31,8 @@ try {
     list($page, $limit, $offset) = getPaginationParams();
 
     // Access allocation params (sent from frontend useAccess hook)
-    $cityIds = isset($_GET['city_ids']) ? array_map('intval', explode(',', $_GET['city_ids'])) : array();
     $unitIds = isset($_GET['unit_ids']) ? array_map('intval', explode(',', $_GET['unit_ids'])) : array();
     // Filter out zeros
-    $cityIds = array_values(array_filter($cityIds, function($v) { return $v > 0; }));
     $unitIds = array_values(array_filter($unitIds, function($v) { return $v > 0; }));
 
     // ─── Build Base Query ─────────────────────────────────────────────────
@@ -45,106 +40,15 @@ try {
     $types = 's';
     $params = array('approved');
 
-    // Role-based filtering (all, managers, admin)
-    if ($roleFilter === 'managers') {
-        $whereClause .= " AND (e.employee_role IN ('manager') OR e.app_role IN ('manager', 'regional_manager'))";
-    } elseif ($roleFilter === 'admin') {
-        $whereClause .= " AND e.employee_role = 'admin'";
-    }
-
     // ─── Access allocation filtering (payroll-driven) ───────────────
-    // Build access filter clause separately — may need JOIN
-    $accessFilter = '';
-    $accessTypes = '';
-    $accessParams = array();
-    $needsUnitsJoin = false;
-    $hasAccessAllocation = false;  // flag: skip legacy scope filter when access allocation is provided
-
-    if (!empty($cityIds)) {
-        $needsUnitsJoin = true;
-        $cityPlaceholders = implode(',', array_fill(0, count($cityIds), '?'));
-        $accessFilter .= "u.city_id IN ($cityPlaceholders)";
-        $accessTypes .= str_repeat('i', count($cityIds));
-        $accessParams = array_merge($accessParams, $cityIds);
-    }
+    $hasAccessAllocation = false;
 
     if (!empty($unitIds)) {
-        if (!empty($accessFilter)) {
-            // Both city and unit access → use OR (union of both access scopes)
-            $accessFilter .= ' OR ';
-        }
         $unitPlaceholders = implode(',', array_fill(0, count($unitIds), '?'));
-        $accessFilter .= "e.unit_id IN ($unitPlaceholders)";
-        $accessTypes .= str_repeat('i', count($unitIds));
-        $accessParams = array_merge($accessParams, $unitIds);
-    }
-
-    // Apply access filter
-    if (!empty($accessFilter)) {
-        $whereClause .= " AND ({$accessFilter})";
-        $types .= $accessTypes;
-        $params = array_merge($params, $accessParams);
+        $whereClause .= " AND e.unit_id IN ($unitPlaceholders)";
+        $types .= str_repeat('i', count($unitIds));
+        $params = array_merge($params, $unitIds);
         $hasAccessAllocation = true;
-    }
-
-    // Scope-based filtering (legacy fallback — SKIP when access allocation is provided)
-    if ($hasAccessAllocation) {
-        // Access allocation already handles filtering — skip legacy scope logic
-    } elseif ($scope === 'team') {
-        $cacheStmt = $conn->prepare('SELECT unit_id, client_id FROM ess_employee_cache WHERE employee_id = ?');
-        if (!$cacheStmt) {
-            jsonOutput(array('success' => false, 'error' => 'Database error'), 500);
-            return;
-        }
-        $cacheStmt->bind_param('s', $employeeId);
-        $cacheStmt->execute();
-        $cacheData = $cacheStmt->get_result()->fetch_assoc();
-        $cacheStmt->close();
-
-        if ($cacheData) {
-            $teamWhere = '';
-            $teamTypes = '';
-            $teamParams = array();
-
-            if (!empty($cacheData['unit_id'])) {
-                $teamWhere .= 'e.unit_id = ?';
-                $teamTypes .= 'i';
-                $teamParams[] = (int)$cacheData['unit_id'];
-            }
-            if (!empty($cacheData['client_id'])) {
-                if (!empty($teamWhere)) $teamWhere .= ' OR ';
-                $teamWhere .= 'e.client_id = ?';
-                $teamTypes .= 'i';
-                $teamParams[] = (int)$cacheData['client_id'];
-            }
-
-            if (!empty($teamWhere)) {
-                $whereClause .= " AND ({$teamWhere})";
-                $types .= $teamTypes;
-                $params = array_merge($params, $teamParams);
-            }
-        }
-    } elseif ($scope === 'unit') {
-        if (empty($unitId)) {
-            $cacheStmt = $conn->prepare('SELECT unit_id FROM ess_employee_cache WHERE employee_id = ?');
-            if (!$cacheStmt) {
-                jsonOutput(array('success' => false, 'error' => 'Database error'), 500);
-                return;
-            }
-            $cacheStmt->bind_param('s', $employeeId);
-            $cacheStmt->execute();
-            $cacheData = $cacheStmt->get_result()->fetch_assoc();
-            $cacheStmt->close();
-            if (!empty($cacheData['unit_id'])) {
-                $whereClause .= ' AND e.unit_id = ?';
-                $types .= 'i';
-                $params[] = (int)$cacheData['unit_id'];
-            }
-        } else {
-            $whereClause .= ' AND e.unit_id = ?';
-            $types .= 'i';
-            $params[] = (int)$unitId;
-        }
     }
 
     if (!empty($search)) {
@@ -169,11 +73,8 @@ try {
         $params[] = $department;
     }
 
-    // ─── Build JOIN clause ───────────────────────────────────────────
-    $joinClause = 'LEFT JOIN clients c ON c.id = e.client_id';
-    if ($needsUnitsJoin) {
-        $joinClause .= ' LEFT JOIN units u ON u.id = e.unit_id';
-    }
+    // ─── Build JOIN clause (always join units for unit_name/city display) ──
+    $joinClause = 'LEFT JOIN clients c ON c.id = e.client_id LEFT JOIN units u ON u.id = e.unit_id';
 
     // ─── Count ───────────────────────────────────────────────────────────
     $countQuery = "SELECT COUNT(*) AS total FROM employees e {$joinClause} {$whereClause}";
@@ -188,12 +89,6 @@ try {
     $countStmt->close();
 
     // ─── Data Query ─────────────────────────────────────────────────────
-    // Always join units for unit_name/city display
-    $dataJoin = $joinClause;
-    if (!$needsUnitsJoin) {
-        $dataJoin .= ' LEFT JOIN units u ON u.id = e.unit_id';
-    }
-
     $dataQuery = "
         SELECT
             e.id AS emp_id, e.full_name, e.mobile_number, e.email,
@@ -204,7 +99,7 @@ try {
             u.name AS unit_name,
             u.city AS emp_city
         FROM employees e
-        {$dataJoin}
+        {$joinClause}
         {$whereClause}
         ORDER BY e.full_name ASC
         LIMIT ? OFFSET ?

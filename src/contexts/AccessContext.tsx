@@ -15,7 +15,6 @@ import type {
   AccessState,
   AccessLevel,
   PermissionResult,
-  CityOption,
 } from '@/lib/access-types';
 import { ACCESS_STORAGE_KEY } from '@/lib/access-types';
 import { fetchAccessAllocation } from '@/lib/ess-api';
@@ -45,7 +44,7 @@ async function fetchAccessFromServer(): Promise<AccessAllocation | null> {
 // localStorage helpers
 // ══════════════════════════════════════════════════════════════
 
-const ACCESS_SCHEMA_VERSION = 5;
+const ACCESS_SCHEMA_VERSION = 6;
 
 function loadAccessFromStorage(): AccessState | null {
   if (typeof window === 'undefined') return null;
@@ -143,8 +142,6 @@ interface AccessContextValue {
   scopeLabel: string;
   /** Access level */
   accessLevel: AccessLevel;
-  /** Comma-separated city IDs string for API params */
-  cityIdsParam: string;
   /** Comma-separated unit IDs string for API params */
   unitIdsParam: string;
 
@@ -179,10 +176,6 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   const scopeLabel = useMemo(
     () => getScopeLabel(role, allocation?.cities ?? [], allocation?.units ?? []),
     [role, allocation?.cities, allocation?.units],
-  );
-  const cityIdsParam = useMemo(
-    () => (allocation?.cities && allocation.cities.length > 0 ? allocation.cities.join(',') : ''),
-    [allocation?.cities],
   );
   const unitIdsParam = useMemo(
     () => (allocation?.units && allocation.units.length > 0 ? allocation.units.join(',') : ''),
@@ -303,7 +296,6 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       isLoading,
       scopeLabel,
       accessLevel,
-      cityIdsParam,
       unitIdsParam,
       canViewEmployee,
       canViewAttendance,
@@ -317,7 +309,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     }),
     [
       allocation, isLoaded, isLoading, scopeLabel, accessLevel,
-      cityIdsParam, unitIdsParam,
+      unitIdsParam,
       canViewEmployee, canViewAttendance, canViewLeave,
       canViewExpense, canViewAdvance, canViewDirectory,
       checkPermission, refreshAccess, clearAccess,
@@ -340,4 +332,3 @@ export function useAccess(): AccessContextValue {
 }
 
 // Re-export types for convenience
-export type { CityOption };

@@ -7,19 +7,15 @@
  * FALLBACK:      `employee_city_allocations` table (backward compatible)
  *
  * Role system (from employees.app_role):
- *   admin/regional_manager → allocated cities → sees all employees in those cities
- *   manager                 → allocated units  → sees employees in those units
- *   employee                → self only (no directory)
- *
- * Worker category exclusion in directory:
- *   Always exclude: 'Semi-Skilled', 'Unskilled', 'Supervisor'
+ *   manager → allocated units  → sees employees in those units
+ *   employee → self only (no directory)
  *
  * HK Supervisor / Forklift auto-assign:
  *   If designation contains "HK Supervisor" or "Forklift Driver",
  *   their own unit is auto-inserted into user_access (cannot be removed).
  *
  * Returns:
- *   { success: true, data: { user_id, role, cities: [], units: [], cities_detail: [] } }
+ *   { success: true, data: { user_id, role, cities: [], units: [] } }
  */
 
 require_once __DIR__ . '/config.php';
@@ -32,40 +28,6 @@ try {
     validateApiKey();
     $employeeId = requireAuth(); // numeric employee ID from JWT
     $conn = getDbConnection();
-
-    // ─── Auto-create tables if not exist ──────────────────────────────
-
-    // Cities lookup table
-    $conn->query("
-        CREATE TABLE IF NOT EXISTS ess_cities (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            name VARCHAR(100) NOT NULL,
-            state VARCHAR(100) DEFAULT '',
-            is_active TINYINT(1) DEFAULT 1,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY uk_name (name)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    ");
-
-    // Seed cities from existing units table
-    $conn->query("
-        INSERT IGNORE INTO ess_cities (name, state)
-        SELECT DISTINCT u.city, COALESCE(u.state, '')
-        FROM units u
-        WHERE u.city IS NOT NULL AND u.city != '' AND u.is_active = 1
-    ");
-
-    // Backfill city_id column on units table
-    $colCheck = $conn->query("SHOW COLUMNS FROM units LIKE 'city_id'");
-    if ($colCheck->num_rows === 0) {
-        $conn->query("ALTER TABLE units ADD COLUMN city_id INT NULL AFTER city");
-    }
-    $conn->query("
-        UPDATE units u
-        INNER JOIN ess_cities c ON c.name = u.city
-        SET u.city_id = c.id
-        WHERE u.city_id IS NULL AND u.city IS NOT NULL AND u.city != ''
-    ");
 
     // ─── Ensure user_access table exists ──────────────────────────────
     $conn->query("
@@ -130,14 +92,12 @@ try {
                 'role' => 'admin',
                 'cities' => array(),
                 'units' => array(),
-                'cities_detail' => array(),
             )
         ));
         return;
     }
 
-    // ─── Read allocations from user_access (PRIMARY) ────────────────
-    $cityNames = array();
+    // ─── Read allocations from user_access (PRIMARY) — unit rows only ───
     $unitNames = array();
     $hasUserAccess = false;
 
@@ -147,19 +107,18 @@ try {
         $uaStmt->execute();
         $uaResult = $uaStmt->get_result();
         while ($row = $uaResult->fetch_assoc()) {
-            $hasUserAccess = true;
             $type = strtolower(trim($row['access_type']));
             $value = trim($row['access_id']);
-            if ($type === 'city' && $value !== '') {
-                $cityNames[] = $value;
-            } elseif ($type === 'unit' && $value !== '') {
+            // Only collect unit-type rows; ignore city rows
+            if ($type === 'unit' && $value !== '') {
                 $unitNames[] = $value;
+                $hasUserAccess = true;
             }
         }
         $uaStmt->close();
     }
 
-    // ─── Fallback: read from employee_city_allocations (legacy) ─────
+    // ─── Fallback: read from employee_city_allocations (legacy) — unit only ──
     if (!$hasUserAccess) {
         $legacyStmt = $conn->prepare('
             SELECT allocation_type, allocation_value
@@ -172,9 +131,8 @@ try {
         while ($row = $legacyResult->fetch_assoc()) {
             $type = strtolower(trim($row['allocation_type']));
             $value = trim($row['allocation_value']);
-            if ($type === 'city' && $value !== '') {
-                $cityNames[] = $value;
-            } elseif ($type === 'unit' && $value !== '') {
+            // Only collect unit-type rows; ignore city rows
+            if ($type === 'unit' && $value !== '') {
                 $unitNames[] = $value;
             }
         }
@@ -196,111 +154,30 @@ try {
         $unitStmt->close();
     }
 
-    // ─── Convert city names → city IDs ────────────────────────────────
-    $cityIds = array();
-    if (!empty($cityNames)) {
-        $placeholders = implode(',', array_fill(0, count($cityNames), '?'));
-        $cityStmt = $conn->prepare("SELECT id FROM ess_cities WHERE name IN ($placeholders) AND is_active = 1");
-        $types = str_repeat('s', count($cityNames));
-        bindDynamicParams($cityStmt, $types, $cityNames);
-        $cityStmt->execute();
-        $cityResult = $cityStmt->get_result();
-        while ($row = $cityResult->fetch_assoc()) {
-            $cityIds[] = (int)$row['id'];
-        }
-        $cityStmt->close();
-    }
-
-    // ─── Derive city IDs from unit allocations ───────────────────────
-    if (!empty($unitIds)) {
-        $placeholders = implode(',', array_fill(0, count($unitIds), '?'));
-        $cityFromUnitStmt = $conn->prepare("
-            SELECT DISTINCT u.city_id
-            FROM units u
-            WHERE u.id IN ($placeholders) AND u.city_id IS NOT NULL
-        ");
-        $types = str_repeat('i', count($unitIds));
-        bindDynamicParams($cityFromUnitStmt, $types, $unitIds);
-        $cityFromUnitStmt->execute();
-        $cityFromUnitResult = $cityFromUnitStmt->get_result();
-        while ($row = $cityFromUnitResult->fetch_assoc()) {
-            $cid = (int)$row['city_id'];
-            if ($cid && !in_array($cid, $cityIds)) {
-                $cityIds[] = $cid;
-            }
-        }
-        $cityFromUnitStmt->close();
-    }
-
     // ─── HK Supervisor / Forklift auto-assign fallback ─────────────
     // If no allocations found but designation matches, auto-use own unit
-    if (empty($unitIds) && empty($cityIds) && $ownUnitId) {
+    if (empty($unitIds) && $ownUnitId) {
         $isAutoAssign = (strpos($designation, 'hk supervisor') !== false
                       || strpos($designation, 'forklift driver') !== false
                       || strpos($designation, 'fork lift driver') !== false);
         if ($isAutoAssign) {
             $unitIds = array($ownUnitId);
-            // Derive city from own unit
-            $cityFromOwn = $conn->prepare('SELECT city_id FROM units WHERE id = ? AND city_id IS NOT NULL');
-            $cityFromOwn->bind_param('i', $ownUnitId);
-            $cityFromOwn->execute();
-            $ownCityRow = $cityFromOwn->get_result()->fetch_assoc();
-            $cityFromOwn->close();
-            if ($ownCityRow && $ownCityRow['city_id']) {
-                $cityIds = array((int)$ownCityRow['city_id']);
-            }
         }
     }
 
     // ─── Fallback: use own unit for any manager with no allocations ──
-    if (empty($unitIds) && empty($cityIds) && $ownUnitId && ($appRole === 'manager')) {
+    if (empty($unitIds) && $ownUnitId && ($appRole === 'manager')) {
         $unitIds = array($ownUnitId);
-        $cityFromOwn = $conn->prepare('SELECT city_id FROM units WHERE id = ? AND city_id IS NOT NULL');
-        $cityFromOwn->bind_param('i', $ownUnitId);
-        $cityFromOwn->execute();
-        $ownCityRow = $cityFromOwn->get_result()->fetch_assoc();
-        $cityFromOwn->close();
-        if ($ownCityRow && $ownCityRow['city_id']) {
-            $cityIds = array((int)$ownCityRow['city_id']);
-        }
     }
 
     // ─── Determine effective role ──────────────────────────────────────
-    // Use app_role as primary source; fall back to allocation type
-    if ($appRole === 'regional_manager' || $employeeRole === 'regional_manager') {
-        $role = 'regional_manager';
-    } elseif ($appRole === 'manager' || $appRole === 'field_officer') {
+    // Unit allocations → manager; otherwise → employee
+    if ($appRole === 'manager' || $appRole === 'field_officer') {
         $role = 'manager';
-    } elseif (!empty($cityNames)) {
-        $role = 'regional_manager';
     } elseif (!empty($unitNames)) {
         $role = 'manager';
     } else {
         $role = 'employee';
-    }
-
-    // ─── Fetch city details for frontend display ─────────────────────
-    $citiesDetail = array();
-    if (!empty($cityIds)) {
-        $placeholders = implode(',', array_fill(0, count($cityIds), '?'));
-        $cityDetailStmt = $conn->prepare("
-            SELECT id, name, state
-            FROM ess_cities
-            WHERE id IN ($placeholders) AND is_active = 1
-            ORDER BY name
-        ");
-        $types = str_repeat('i', count($cityIds));
-        bindDynamicParams($cityDetailStmt, $types, $cityIds);
-        $cityDetailStmt->execute();
-        $cityDetailResult = $cityDetailStmt->get_result();
-        while ($row = $cityDetailResult->fetch_assoc()) {
-            $citiesDetail[] = array(
-                'id' => (int)$row['id'],
-                'name' => $row['name'],
-                'state' => $row['state'] ?? '',
-            );
-        }
-        $cityDetailStmt->close();
     }
 
     jsonOutput(array(
@@ -309,9 +186,8 @@ try {
             'user_id' => (int)$employeeId,
             'employee_code' => $employeeCode,
             'role' => $role,
-            'cities' => $cityIds,
+            'cities' => array(),
             'units' => $unitIds,
-            'cities_detail' => $citiesDetail,
         )
     ));
 
