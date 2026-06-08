@@ -45,7 +45,7 @@ async function fetchAccessFromServer(): Promise<AccessAllocation | null> {
 // localStorage helpers
 // ══════════════════════════════════════════════════════════════
 
-const ACCESS_SCHEMA_VERSION = 3;
+const ACCESS_SCHEMA_VERSION = 4;
 
 function loadAccessFromStorage(): AccessState | null {
   if (typeof window === 'undefined') return null;
@@ -94,12 +94,15 @@ function clearAccessStorage(): void {
 function getAccessLevel(role: EmployeeRole): AccessLevel {
   switch (role) {
     case 'admin':
-    case 'regional_manager':
       return 'full';
-    case 'manager':
-    case 'field_officer':
+    // regional_manager → city-level access (allocated cities in user_access)
+    case 'regional_manager':
       return 'city';
+    // manager / supervisor → unit-level access (allocated units in user_access)
+    // In HRMS, both 'manager' app_role and supervisors get UNIT allocations
+    case 'manager':
     case 'supervisor':
+    case 'field_officer':
       return 'unit';
     default:
       return 'self';
@@ -111,13 +114,12 @@ function getScopeLabel(role: EmployeeRole, cities: number[], units: number[]): s
     case 'admin':
       return 'All Employees';
     case 'regional_manager':
-      return 'All Locations';
-    case 'manager':
-    case 'field_officer':
       return cities.length > 0
         ? `${cities.length} ${cities.length === 1 ? 'City' : 'Cities'}`
         : 'Assigned Cities';
+    case 'manager':
     case 'supervisor':
+    case 'field_officer':
       return units.length > 0
         ? `${units.length} ${units.length === 1 ? 'Unit' : 'Units'}`
         : 'Assigned Units';

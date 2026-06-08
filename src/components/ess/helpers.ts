@@ -30,7 +30,7 @@ export function detectRole(employee: Employee): EmployeeRole {
 
 // ── Directory Visibility ──────────────────────────────────
 export function canViewDirectory(role: EmployeeRole): boolean {
-  return role === 'manager' || role === 'regional_manager' || role === 'field_officer' || role === 'admin';
+  return role === 'manager' || role === 'regional_manager' || role === 'field_officer' || role === 'supervisor' || role === 'admin';
 }
 
 export function canApprove(role: EmployeeRole): boolean {
@@ -40,9 +40,9 @@ export function canApprove(role: EmployeeRole): boolean {
 export function getScope(role: EmployeeRole): string {
   switch (role) {
     case 'admin': return 'all';
-    case 'regional_manager': return 'all';
-    case 'manager': return 'city';
-    case 'field_officer': return 'city';
+    case 'regional_manager': return 'city';
+    case 'manager': return 'unit';
+    case 'field_officer': return 'unit';
     case 'supervisor': return 'unit';
     default: return 'self';
   }
