@@ -598,3 +598,23 @@ Stage Summary:
 - Root cause: allocation_value contained unit NAMES not unit IDs, needed name-to-ID conversion
 - Fix deployed to production, pushed to GitHub
 - Employee 9 with 24 unit allocations should now see employees from those units on the Directory page
+---
+Task ID: 3
+Agent: Main Agent
+Task: Fix supervisor directory - employees page missing, can't see own units' employees
+
+Work Log:
+- Read all relevant files: DirectoryPage.tsx, ESSApp.tsx, AccessContext.tsx, ess-api.ts, employees.php, filters.php, access.php, helpers.ts, constants.ts, config.ts, access-types.ts, ess-types.ts
+- Identified Root Cause 1 (Double filtering in employees.php): When scope='unit' (supervisor), the legacy scope filter reads ess_employee_cache and adds `AND e.unit_id = ?` restricting to user's own unit. Combined with access allocation filter `AND (e.unit_id IN (2,14,15,...))`, this restricts to only the supervisor's own unit, not all allocated units
+- Identified Root Cause 2 (Blank directory page): `access.canViewDirectory()` returns false when allocation is null (still loading). ESSApp renders nothing when this condition is false - no loading state, no error message
+- Fixed employees.php: Added `$hasAccessAllocation` flag. When access allocation (unit_ids or city_ids) is provided, skip the entire legacy scope filter block (team/unit fallback)
+- Fixed DirectoryPage.tsx: Added `effectiveScope` override - when unitIds or cityIds are non-empty, set scope to 'all' instead of the role-derived scope (belt-and-suspenders fix)
+- Fixed ESSApp.tsx: Added loading spinner and "Access Restricted" message when directory page is shown but access hasn't loaded or is denied
+- Bumped ACCESS_SCHEMA_VERSION from 2 to 3 to force-clear stale cached access data
+- Built, committed, pushed to GitHub, and deployed to production
+
+Stage Summary:
+- 3 files modified: api/ess/employees.php, src/components/ess/DirectoryPage.tsx, src/components/ess/ESSApp.tsx, src/contexts/AccessContext.tsx
+- Commit: 167d4bc pushed to main
+- Deployed to join.rcsfacility.com
+- Supervisor should now: (1) see loading spinner while access loads, (2) see directory page with all allocated units' employees (not just own unit), (3) see only allocated units in dropdown filters
