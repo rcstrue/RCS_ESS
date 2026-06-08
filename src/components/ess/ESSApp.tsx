@@ -40,7 +40,7 @@ import { getGreeting, getInitials, getScope, canApprove, detectRole } from './he
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 // lucide icons
-import { Building2, Loader2, UserPlus, Bell } from 'lucide-react';
+import { Building2, Loader2, UserPlus, Bell, Users } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════
 // ESSApp — Slim orchestrator: auth, navigation, routing
@@ -343,6 +343,23 @@ function ESSAppInner({ onBackToRegistration }: { onBackToRegistration: () => voi
             cityIdsParam={access.cityIdsParam}
             unitIdsParam={access.unitIdsParam}
           />
+        )}
+        {currentPage === 'directory' && !access.canViewDirectory() && access.isLoading && (
+          <div className="flex flex-col items-center justify-center gap-3 py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+            <p className="text-sm text-muted-foreground">Loading access permissions...</p>
+          </div>
+        )}
+        {currentPage === 'directory' && !access.canViewDirectory() && !access.isLoading && access.isLoaded && (
+          <div className="flex flex-col items-center justify-center gap-3 py-20">
+            <Users className="h-10 w-10 text-muted-foreground/50" />
+            <div className="text-center">
+              <p className="font-medium text-muted-foreground">Access Restricted</p>
+              <p className="text-sm text-muted-foreground/70">
+                You don't have permission to view the employee directory.
+              </p>
+            </div>
+          </div>
         )}
         {currentPage === 'expenses' && <ExpensesPage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} canApprove={isApprover} onAddNotification={handleAddNotification} />}
         {currentPage === 'attendance' && <AttendancePage employeeId={emp.id} employeeName={emp.full_name || 'Employee'} role={role} />}

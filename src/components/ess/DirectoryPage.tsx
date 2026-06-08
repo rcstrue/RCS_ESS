@@ -194,8 +194,12 @@ export default function DirectoryPage({
     setError(null);
     setSearchedOnce(true);
     try {
+      // When access allocation (unitIds/cityIds) is provided, override scope to 'all'
+      // so the backend uses ONLY the access allocation filter and skips legacy scope logic
+      // which would restrict to the user's own unit only
+      const effectiveScope = (unitIds.length > 0 || cityIds.length > 0) ? 'all' : scope;
       const { data: res, error: fetchError } = await fetchEmployees({
-        scope,
+        scope: effectiveScope,
         requester_id: employeeId,
         page,
         limit: PAGE_SIZE,

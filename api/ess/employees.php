@@ -58,6 +58,7 @@ try {
     $accessTypes = '';
     $accessParams = array();
     $needsUnitsJoin = false;
+    $hasAccessAllocation = false;  // flag: skip legacy scope filter when access allocation is provided
 
     if (!empty($cityIds)) {
         $needsUnitsJoin = true;
@@ -83,10 +84,13 @@ try {
         $whereClause .= " AND ({$accessFilter})";
         $types .= $accessTypes;
         $params = array_merge($params, $accessParams);
+        $hasAccessAllocation = true;
     }
 
-    // Scope-based filtering (legacy fallback when no access allocation)
-    if ($scope === 'team') {
+    // Scope-based filtering (legacy fallback — SKIP when access allocation is provided)
+    if ($hasAccessAllocation) {
+        // Access allocation already handles filtering — skip legacy scope logic
+    } elseif ($scope === 'team') {
         $cacheStmt = $conn->prepare('SELECT unit_id, client_id FROM ess_employee_cache WHERE employee_id = ?');
         if (!$cacheStmt) {
             jsonOutput(array('success' => false, 'error' => 'Database error'), 500);

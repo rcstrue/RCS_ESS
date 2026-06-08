@@ -45,7 +45,7 @@ async function fetchAccessFromServer(): Promise<AccessAllocation | null> {
 // localStorage helpers
 // ══════════════════════════════════════════════════════════════
 
-const ACCESS_SCHEMA_VERSION = 2;
+const ACCESS_SCHEMA_VERSION = 3;
 
 function loadAccessFromStorage(): AccessState | null {
   if (typeof window === 'undefined') return null;
