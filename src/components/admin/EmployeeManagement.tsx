@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { toast } from 'sonner';
-import { Check, X, Eye, Loader2, UserCog, Search, User, Filter } from 'lucide-react';
+import { Check, X, Eye, Loader2, UserCog, Search, User, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import { EmployeeDetailDialog } from './EmployeeDetailDialog';
 import { getFileUrl } from '@/lib/api/config';
 
@@ -51,7 +51,13 @@ export function EmployeeManagement({ userRole }: EmployeeManagementProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [clientFilter, setClientFilter] = useState<string>('all');
+  const [unitFilter, setUnitFilter] = useState<string>('all');
   const [clients, setClients] = useState<string[]>([]);
+  const [units, setUnits] = useState<string[]>([]);
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   const fetchEmployees = useCallback(async () => {
     setIsLoading(true);
@@ -68,9 +74,27 @@ export function EmployeeManagement({ userRole }: EmployeeManagementProps) {
         .map(e => e.client_name)
         .filter(Boolean) as string[])];
       setClients(uniqueClients);
+
+      // Extract unique units
+      const uniqueUnits = [...new Set(employeeList
+        .map(e => e.unit_name)
+        .filter(Boolean) as string[])];
+      setUnits(uniqueUnits);
     }
     setIsLoading(false);
   }, []);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, clientFilter, unitFilter]);
+
+  // Computed pagination values
+  const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / pageSize));
+  const paginatedEmployees = filteredEmployees.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
 
   const filterEmployees = useCallback(() => {
     let filtered = [...employees];
@@ -101,8 +125,13 @@ export function EmployeeManagement({ userRole }: EmployeeManagementProps) {
       filtered = filtered.filter(e => e.client_name === clientFilter);
     }
 
+    // Unit filter
+    if (unitFilter !== 'all') {
+      filtered = filtered.filter(e => e.unit_name === unitFilter);
+    }
+
     setFilteredEmployees(filtered);
-  }, [employees, searchQuery, statusFilter, clientFilter]);
+  }, [employees, searchQuery, statusFilter, clientFilter, unitFilter]);
 
   useEffect(() => {
     fetchEmployees();
@@ -241,7 +270,7 @@ export function EmployeeManagement({ userRole }: EmployeeManagementProps) {
                 <SelectItem value="rejected">Rejected</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={clientFilter} onValueChange={setClientFilter}>
+            <Select value={clientFilter} onValueChange={(val) => { setClientFilter(val); setUnitFilter('all'); }}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Client" />
               </SelectTrigger>
@@ -252,6 +281,47 @@ export function EmployeeManagement({ userRole }: EmployeeManagementProps) {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={unitFilter} onValueChange={setUnitFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Unit" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Units</SelectItem>
+                {units
+                  .filter(u => clientFilter === 'all' || employees.some(e => e.unit_name === u && e.client_name === clientFilter))
+                  .map(unit => (
+                    <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between mb-6">
+            <p className="text-sm text-muted-foreground">
+              Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredEmployees.length)} of {filteredEmployees.length} employees
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="text-sm font-medium px-2">
+                Page {currentPage} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
 
           {/* Table */}
@@ -268,7 +338,7 @@ export function EmployeeManagement({ userRole }: EmployeeManagementProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredEmployees.map((employee) => (
+                {paginatedEmployees.map((employee) => (
                   <TableRow key={employee.id} className="cursor-pointer hover:bg-muted/50">
                     <TableCell onClick={() => openDetailDialog(employee)}>
                       <div className="flex items-center gap-3">
@@ -354,7 +424,7 @@ export function EmployeeManagement({ userRole }: EmployeeManagementProps) {
                     </TableCell>
                   </TableRow>
                 ))}
-                {filteredEmployees.length === 0 && (
+                {filteredEmployees.length === 0 && paginatedEmployees.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                       <User className="w-12 h-12 mx-auto mb-4 opacity-50" />
@@ -366,6 +436,7 @@ export function EmployeeManagement({ userRole }: EmployeeManagementProps) {
                             setSearchQuery('');
                             setStatusFilter('all');
                             setClientFilter('all');
+                            setUnitFilter('all');
                           }}
                         >
                           Clear filters

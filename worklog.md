@@ -671,3 +671,27 @@ Stage Summary:
 - Client and unit dropdowns already show only allocated items (backend filtering via unit_ids param)
 - DirectoryPage.tsx simplified: less state, fewer imports, cleaner filter logic
 - Deployed to join.rcsfacility.com
+---
+Task ID: 6
+Agent: Main Agent
+Task: Add pagination controls under client/unit dropdowns in EmployeeManagement
+
+Work Log:
+- Added `unitFilter` state and `units` array to EmployeeManagement component
+- Extracted unique units from employee data alongside clients
+- Added Unit dropdown filter that dynamically filters based on selected client
+- Added client-side pagination with `currentPage` state and `pageSize = 20`
+- Pagination bar placed directly under client and unit dropdowns (above table)
+- Shows "Showing X–Y of Z employees" on left, ◀ Page X of Y ▶ buttons on right
+- Table renders `paginatedEmployees` slice instead of all `filteredEmployees`
+- Page resets to 1 when any filter changes
+- Added `ChevronLeft` and `ChevronRight` icons import
+- Fixed `filterEmployees` dependency array to include `unitFilter`
+- Fixed "Clear filters" button to also reset `unitFilter`
+- Lint passes with zero errors
+
+Stage Summary:
+- 1 file modified: src/components/admin/EmployeeManagement.tsx
+- Pagination buttons (◀ ▶) now visible under client and unit dropdowns
+- Unit dropdown filter added (filters by selected client's units)
+- 20 employees per page with page counter
