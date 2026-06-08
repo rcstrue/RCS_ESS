@@ -3,9 +3,6 @@
  * ESS API — Employee Directory Endpoint
  * GET: Search/filter employees with role-based access control
  *
- * Worker category exclusion (from HRMS payroll rules):
- *   - Always exclude: Semi-Skilled, Unskilled
- *
  * Access allocation filtering (from user_access table):
  *   - unit_ids  → filter by e.unit_id (manager/supervisor with unit allocations)
  *   - city_ids  → filter by u.city_id (regional_manager with city allocations)
@@ -47,11 +44,6 @@ try {
     $whereClause = 'WHERE e.status = ?';
     $types = 's';
     $params = array('approved');
-
-    // Worker category exclusion (from HRMS payroll rules)
-    // Always exclude: Semi-Skilled, Unskilled
-    // Always include: Skilled, Supervisor, and all other categories
-    $whereClause .= " AND (e.worker_category IS NULL OR e.worker_category NOT IN ('Semi-Skilled', 'Unskilled'))";
 
     // Role-based filtering (all, managers, admin)
     if ($roleFilter === 'managers') {
