@@ -177,19 +177,44 @@ try {
         $cityFromUnitStmt->close();
     }
 
+    // ─── Fallback: derive from employee's own unit/city when no allocations ──
+    // If supervisor/manager has no explicit payroll allocations, restrict to
+    // their own unit (supervisor) or own city (manager) from employee_cache.
+    if (empty($unitIds) && empty($cityIds) && $cacheRow) {
+        if (($baseRole === 'supervisor' || $baseRole === 'field_officer') && !empty($cacheRow['unit_id'])) {
+            // Supervisor with no allocations → only see their own unit
+            $unitIds = array((int)$cacheRow['unit_id']);
+            // Also derive city from their unit
+            $cityFromOwnUnit = $conn->prepare('SELECT city_id FROM units WHERE id = ? AND city_id IS NOT NULL');
+            $cityFromOwnUnit->bind_param('i', (int)$cacheRow['unit_id']);
+            $cityFromOwnUnit->execute();
+            $ownCityRow = $cityFromOwnUnit->get_result()->fetch_assoc();
+            $cityFromOwnUnit->close();
+            if ($ownCityRow && $ownCityRow['city_id']) {
+                $cityIds = array((int)$ownCityRow['city_id']);
+            }
+        } elseif (($baseRole === 'manager') && !empty($cacheRow['unit_id'])) {
+            // Manager with no allocations → only see their own city
+            $cityFromOwnUnit = $conn->prepare('SELECT city_id FROM units WHERE id = ? AND city_id IS NOT NULL');
+            $cityFromOwnUnit->bind_param('i', (int)$cacheRow['unit_id']);
+            $cityFromOwnUnit->execute();
+            $ownCityRow = $cityFromOwnUnit->get_result()->fetch_assoc();
+            $cityFromOwnUnit->close();
+            if ($ownCityRow && $ownCityRow['city_id']) {
+                $cityIds = array((int)$ownCityRow['city_id']);
+            }
+        }
+    }
+
     // ─── Determine effective role ──────────────────────────────────────
     $role = $baseRole;
     if (!empty($cityNames) && !empty($unitNames)) {
-        // Has both city and unit allocations → treat as manager (broader access)
         $role = 'manager';
     } elseif (!empty($cityNames)) {
-        // City allocations only → manager
         $role = 'manager';
     } elseif (!empty($unitNames)) {
-        // Unit allocations only → supervisor
         $role = 'supervisor';
     }
-    // else: no allocations → keep base role (employee or whatever cache says)
 
     // ─── Fetch city details for frontend display ──────────────────────
     $citiesDetail = array();
