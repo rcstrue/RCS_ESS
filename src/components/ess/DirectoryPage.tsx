@@ -275,7 +275,7 @@ export default function DirectoryPage({
     setSelectedCity('');
   };
 
-  const hasActiveFilters = searchQuery || (selectedClient && selectedClient !== 'all_clients') || (selectedUnit && selectedUnit !== 'all_units') || selectedCity;
+  const hasActiveFilters = searchQuery || (selectedClient && selectedClient !== 'all_clients') || (selectedUnit && selectedUnit !== 'all_units') || (selectedCity && selectedCity !== 'all_cities');
 
   // ── CSV Export ──
   const { exportCSV } = useExportCSV();
@@ -410,7 +410,7 @@ export default function DirectoryPage({
             <SelectValue placeholder={filtersLoading ? 'Loading...' : 'All Cities'} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Cities</SelectItem>
+            <SelectItem value="all_cities">All Cities</SelectItem>
             {cities.map((c) => (
               <SelectItem key={c.id} value={String(c.id)}>
                 {c.name}{c.state ? ` (${c.state})` : ''}
@@ -448,7 +448,7 @@ export default function DirectoryPage({
               </button>
             </Badge>
           )}
-          {selectedCity && (
+          {selectedCity && selectedCity !== 'all_cities' && (
             <Badge variant="secondary" className="gap-1 text-xs">
               📍 {cities.find((c) => String(c.id) === selectedCity)?.name || 'City'}
               <button onClick={() => setSelectedCity('')}>
