@@ -618,3 +618,26 @@ Stage Summary:
 - Commit: 167d4bc pushed to main
 - Deployed to join.rcsfacility.com
 - Supervisor should now: (1) see loading spinner while access loads, (2) see directory page with all allocated units' employees (not just own unit), (3) see only allocated units in dropdown filters
+---
+Task ID: 5
+Agent: Main Agent
+Task: Align ESS employee directory with HRMS user_access table structure
+
+Work Log:
+- Read user's HRMS documentation: user_access table is the PRIMARY source (not employee_city_allocations)
+- Key insight: user_access.user_id stores employee_code (VARCHAR), not numeric employee_id
+- Key insight: app_role in employees table determines access type (regional_manager→city, manager→unit)
+- Key insight: Worker categories Semi-Skilled, Unskilled, Supervisor must be excluded from directory
+- Rewrote access.php: reads from user_access first using employee_code (from ess_employee_cache), falls back to employee_city_allocations
+- Updated employees.php: added worker_category exclusion filter
+- Fixed AccessContext.tsx: corrected role→accessLevel mapping (regional_manager→city, manager→unit)
+- Updated helpers.ts: getScope, canViewDirectory aligned with new mapping
+- Bumped ACCESS_SCHEMA_VERSION to 4 to force-clear stale cache
+- Built, committed (aae921a), deployed to production
+
+Stage Summary:
+- 5 files modified: api/ess/access.php, api/ess/employees.php, src/contexts/AccessContext.tsx, src/components/ess/helpers.ts
+- access.php now reads from the correct HRMS user_access table
+- Regional managers see city-level access, managers see unit-level access
+- Semi-Skilled/Unskilled/Supervisor workers excluded from directory results
+- Deployed to join.rcsfacility.com
