@@ -27,7 +27,6 @@ import {
   Eye,
   EyeOff,
   Download,
-  MapPin,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -39,10 +38,9 @@ import {
   fetchEmployeeById,
   fetchClients,
   fetchUnits,
-  fetchCities,
 } from '@/lib/ess-api';
 import type { Employee, ClientOption, UnitOption } from '@/lib/ess-types';
-import type { AccessLevel, CityOption } from '@/lib/access-types';
+import type { AccessLevel } from '@/lib/access-types';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -145,12 +143,9 @@ export default function DirectoryPage({
   const [searchInput, setSearchInput] = useState('');
   const [selectedClient, setSelectedClient] = useState('');
   const [selectedUnit, setSelectedUnit] = useState('');
-  const [selectedCity, setSelectedCity] = useState('');
-
   // Filter options
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [units, setUnits] = useState<UnitOption[]>([]);
-  const [cities, setCities] = useState<CityOption[]>([]);
   const [filtersLoading, setFiltersLoading] = useState(true);
 
   // Profile dialog
@@ -172,21 +167,13 @@ export default function DirectoryPage({
           setUnits(Array.isArray(r?.data) ? r.data : []);
         }),
       ];
-      // Fetch cities for managers (city-level access)
-      if (accessLevel === 'city' || accessLevel === 'full') {
-        promises.push(
-          fetchCities().then((r) => {
-            setCities(Array.isArray(r?.data) ? r.data : []);
-          }),
-        );
-      }
       await Promise.all(promises);
     } catch (err) {
       console.error('Failed to load filters:', err);
     } finally {
       setFiltersLoading(false);
     }
-  }, [scope, employeeId, accessLevel, unitIds]);
+  }, [scope, employeeId, unitIds]);
 
   // ── Load employees (only after user applies a filter or search) ──
   const loadEmployees = useCallback(async () => {
@@ -248,7 +235,7 @@ export default function DirectoryPage({
     if (isAccessControlled) {
       loadEmployees();
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- intentional mount-only
 
   // Re-load when search/filter changes
   useEffect(() => {
@@ -276,10 +263,9 @@ export default function DirectoryPage({
     setSearchInput('');
     setSelectedClient('');
     setSelectedUnit('');
-    setSelectedCity('');
   };
 
-  const hasActiveFilters = searchQuery || (selectedClient && selectedClient !== 'all_clients') || (selectedUnit && selectedUnit !== 'all_units') || (selectedCity && selectedCity !== 'all_cities');
+  const hasActiveFilters = searchQuery || (selectedClient && selectedClient !== 'all_clients') || (selectedUnit && selectedUnit !== 'all_units');
 
   // ── CSV Export ──
   const { exportCSV } = useExportCSV();
@@ -406,24 +392,6 @@ export default function DirectoryPage({
         </Select>
       </div>
 
-      {/* City filter (for managers with city-level access) */}
-      {(accessLevel === 'city' || accessLevel === 'full') && cities.length > 0 && (
-        <Select value={selectedCity} onValueChange={(v) => setSelectedCity(v)}>
-          <SelectTrigger className="h-9 text-sm">
-            <MapPin className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-            <SelectValue placeholder={filtersLoading ? 'Loading...' : 'All Cities'} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all_cities">All Cities</SelectItem>
-            {cities.map((c) => (
-              <SelectItem key={c.id} value={String(c.id)}>
-                {c.name}{c.state ? ` (${c.state})` : ''}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
-
       {/* Active filters indicator */}
       {hasActiveFilters && (
         <div className="flex items-center gap-2">
@@ -448,14 +416,6 @@ export default function DirectoryPage({
             <Badge variant="secondary" className="gap-1 text-xs">
               {filteredUnits.find((u) => String(u.id) === selectedUnit)?.name || 'Unit'}
               <button onClick={() => setSelectedUnit('')}>
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          )}
-          {selectedCity && selectedCity !== 'all_cities' && (
-            <Badge variant="secondary" className="gap-1 text-xs">
-              📍 {cities.find((c) => String(c.id) === selectedCity)?.name || 'City'}
-              <button onClick={() => setSelectedCity('')}>
                 <X className="h-3 w-3" />
               </button>
             </Badge>

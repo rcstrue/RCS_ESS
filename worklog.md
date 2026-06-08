@@ -641,3 +641,33 @@ Stage Summary:
 - Regional managers see city-level access, managers see unit-level access
 - Semi-Skilled/Unskilled/Supervisor workers excluded from directory results
 - Deployed to join.rcsfacility.com
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Remove city dropdown from employees page and ensure only allocated clients/units show in dropdowns
+
+Work Log:
+- Read DirectoryPage.tsx, filters.php, ess-api.ts, AccessContext.tsx to understand current implementation
+- Confirmed backend already supports unit_ids filtering: filters.php _handleClients() uses INNER JOIN with units table when unit_ids provided, _handleUnits() uses AND u.id IN (...) when unit_ids provided
+- Confirmed frontend already passes unitIds to fetchClients and fetchUnits in loadFilters()
+- Removed city dropdown from DirectoryPage.tsx:
+  - Removed duplicate MapPin import
+  - Removed CityOption from access-types import
+  - Removed selectedCity state variable
+  - Removed cities state variable
+  - Removed fetchCities import from ess-api.ts
+  - Removed cities fetch from loadFilters() callback
+  - Removed accessLevel from loadFilters dependency array (no longer needed)
+  - Removed selectedCity from clearFilters()
+  - Removed selectedCity from hasActiveFilters
+  - Removed city dropdown JSX block (Select component with MapPin icon)
+  - Removed city badge from active filters section
+  - Fixed unused eslint-disable directive
+- Built successfully, deployed to production
+
+Stage Summary:
+- City dropdown completely removed from employees/directory page
+- Client and unit dropdowns already show only allocated items (backend filtering via unit_ids param)
+- DirectoryPage.tsx simplified: less state, fewer imports, cleaner filter logic
+- Deployed to join.rcsfacility.com
