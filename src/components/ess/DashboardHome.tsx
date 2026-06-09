@@ -127,9 +127,13 @@ export default function DashboardHome({
   const attStatus = att?.status || null;
   const canCheckIn = !attStatus || attStatus === 'absent' || attStatus === 'holiday' || attStatus === 'leave';
 
-  // Check-out available immediately after check-in
-  const canCheckOut = attStatus === 'checked_in';
-  const isCheckedOut = attStatus === 'checked_out' || attStatus === 'present';
+  // Check-out available when: status is checked_in, OR has check_in time but no check_out
+  // (PHP sets status to 'present'/'late' on check-in, never 'checked_in')
+  const hasCheckIn = !!att?.check_in;
+  const hasNoCheckOut = !att?.check_out;
+  const canCheckOut = attStatus === 'checked_in' || (hasCheckIn && hasNoCheckOut && (attStatus === 'present' || attStatus === 'late'));
+  const isCheckedOut = attStatus === 'checked_out' || (attStatus === 'present' && hasCheckIn && !hasNoCheckOut) || attStatus === 'late' && hasCheckIn && !hasNoCheckOut;
+
 
   const formatAttTime = (iso: string | undefined) => {
     if (!iso) return null;
@@ -192,13 +196,13 @@ export default function DashboardHome({
   };
 
   const statusLabel = !attStatus ? 'Not Marked' :
-    attStatus === 'checked_in' ? 'Checked In' :
-    attStatus === 'checked_out' ? 'Checked Out' :
+    canCheckOut ? 'Checked In' :
+    isCheckedOut ? 'Checked Out' :
     attStatus === 'late' ? 'Late' :
     attStatus === 'present' ? 'Present' :
     attStatus === 'absent' ? 'Absent' : attStatus;
-  const statusColor = attStatus === 'checked_in' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
-    attStatus === 'checked_out' ? 'bg-slate-100 text-slate-600 border-slate-200' :
+  const statusColor = canCheckOut ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+    isCheckedOut ? 'bg-slate-100 text-slate-600 border-slate-200' :
     attStatus === 'late' ? 'bg-amber-100 text-amber-700 border-amber-200' :
     attStatus === 'present' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
     'bg-gray-100 text-gray-600 border-gray-200';
@@ -266,7 +270,7 @@ export default function DashboardHome({
                   <Clock className="w-4 h-4 text-emerald-500" />
                   <span className="text-sm font-medium text-gray-700">Today&apos;s Attendance</span>
                 </div>
-                <Badge variant="outline" className={`text-xs font-medium ${statusColor} ${attStatus === 'checked_in' ? 'animate-pulse' : ''}`}>
+                <Badge variant="outline" className={`text-xs font-medium ${statusColor} ${canCheckOut ? 'animate-pulse' : ''}`}>
                   {statusLabel}
                 </Badge>
               </div>
