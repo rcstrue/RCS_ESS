@@ -169,6 +169,11 @@ function ESSAppInner({ onBackToRegistration }: { onBackToRegistration: () => voi
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
+  // Navigation history stack for hardware back button support
+  const navHistoryRef = useRef<string[]>([]);
+  const currentPageRef = useRef(currentPage);
+  useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
+
   // ── Notifications (unconditionally before early returns) ──
   const notifications = useNotifications(session?.employee?.id ?? 0);
   const handleAddNotification = (title: string, message: string, type: 'leave' | 'expense' | 'task' | 'helpdesk') => {
@@ -204,10 +209,59 @@ function ESSAppInner({ onBackToRegistration }: { onBackToRegistration: () => voi
       setShowMoreMenu(false);
       return;
     }
+
+    // Push browser history entry for hardware back button support
+    const prev = currentPageRef.current;
+    if (page !== prev) {
+      // Only push history when navigating to a genuinely different page
+      history.pushState({ page: prev }, '');
+      navHistoryRef.current.push(prev);
+
+      // If navigating to dashboard, clear the nav history
+      if (page === 'dashboard') {
+        navHistoryRef.current = [];
+      }
+    }
+
     setCurrentPage(page);
     setShowMoreMenu(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [clearSession, pwa]);
+
+  // ── Hardware Back Button Support (popstate) ──
+  useEffect(() => {
+    const handlePopState = () => {
+      // Close more menu first if open
+      if (showMoreMenu) {
+        setShowMoreMenu(false);
+        history.pushState(null, '');
+        return;
+      }
+
+      // If we have internal navigation history, go back
+      if (navHistoryRef.current.length > 0) {
+        const prevPage = navHistoryRef.current.pop();
+        if (prevPage) {
+          setCurrentPage(prevPage);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        // Don't push state again — browser already popped one entry
+        return;
+      }
+
+      // No history left — let the browser handle it (app will close/go back)
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [showMoreMenu]);
+
+  // Replace current history entry when on dashboard to avoid stale entries
+  useEffect(() => {
+    if (currentPage === 'dashboard') {
+      history.replaceState(null, '');
+    }
+  }, [currentPage]);
 
   // ── Dashboard ──
   const { dashboardData, dashboardLoading, checkInLoading, checkOutLoading, loadDashboardData, handleCheckIn, handleCheckOut } = useDashboard(session);
