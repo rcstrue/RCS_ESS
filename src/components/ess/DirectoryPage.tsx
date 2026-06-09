@@ -192,10 +192,12 @@ export default function DirectoryPage({
         toast.error(fetchError);
         return;
       }
-      const items = res?.items ?? [];
-      const rawTotal = res?.pagination?.total;
-      const rawTotalPages = res?.pagination?.total_pages;
-      // Backend may not return pagination metadata — fallback to items length
+      const items = (res as Record<string, unknown>)?.items as Employee[] ?? [];
+      // PHP buildPagination merges at top level: { items, total, page, limit, total_pages }
+      // NOT nested under pagination key
+      const rawTotal = (res as Record<string, unknown>)?.total as number | undefined;
+      const rawTotalPages = (res as Record<string, unknown>)?.total_pages as number | undefined;
+      // Fallback to items.length if backend has no pagination metadata
       const effectiveTotal = typeof rawTotal === 'number' ? rawTotal : items.length;
       const effectiveTotalPages = typeof rawTotalPages === 'number' ? rawTotalPages : Math.max(1, Math.ceil(effectiveTotal / PAGE_SIZE));
       setEmployees(items);
