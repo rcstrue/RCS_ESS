@@ -381,6 +381,42 @@ export default function DirectoryPage({
         </Select>
       </div>
 
+      {/* Pagination - under dropdowns, before list */}
+      {searchedOnce && total > 0 && (
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">
+            Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+          </p>
+          <div className="flex items-center gap-1.5">
+            {totalPages > 1 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </Button>
+            )}
+            <span className="text-sm font-medium">
+              Page {page} of {totalPages}
+            </span>
+            {totalPages > 1 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Active filters indicator */}
       {hasActiveFilters && (
         <div className="flex items-center gap-2">
@@ -521,36 +557,28 @@ export default function DirectoryPage({
             ))}
           </div>
 
-          {/* Pagination */}
-          {searchedOnce && total > 0 && (
+          {/* Pagination at bottom of list too */}
+          {searchedOnce && total > PAGE_SIZE && (
             <div className="flex items-center justify-center gap-2 pt-2">
-              {totalPages > 1 && (
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-              )}
-              <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">{page}</span>
-                <span>of</span>
-                <span className="font-medium text-foreground">{totalPages}</span>
-              </div>
-              {totalPages > 1 && (
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
           )}
         </>
