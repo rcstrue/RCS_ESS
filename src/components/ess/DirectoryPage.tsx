@@ -192,9 +192,15 @@ export default function DirectoryPage({
         toast.error(fetchError);
         return;
       }
-      setEmployees(res?.items ?? []);
-      setTotal(res?.pagination?.total ?? 0);
-      setTotalPages(res?.pagination?.total_pages ?? Math.ceil((res?.pagination?.total ?? 0) / PAGE_SIZE));
+      const items = res?.items ?? [];
+      const rawTotal = res?.pagination?.total;
+      const rawTotalPages = res?.pagination?.total_pages;
+      // Backend may not return pagination metadata — fallback to items length
+      const effectiveTotal = typeof rawTotal === 'number' ? rawTotal : items.length;
+      const effectiveTotalPages = typeof rawTotalPages === 'number' ? rawTotalPages : Math.max(1, Math.ceil(effectiveTotal / PAGE_SIZE));
+      setEmployees(items);
+      setTotal(effectiveTotal);
+      setTotalPages(effectiveTotalPages);
     } catch (err) {
       console.error('Failed to fetch employees:', err);
       setError('Failed to load directory. Please try again.');
@@ -313,8 +319,8 @@ export default function DirectoryPage({
         <div>
           <h2 className="text-xl font-bold tracking-tight">Directory</h2>
           <p className="text-sm text-muted-foreground">
-          {searchedOnce && total > 0 ? `${total} employee${total > 1 ? 's' : ''} found` :
-           searchedOnce && total === 0 ? 'No employees found' :
+          {searchedOnce && (total > 0 || employees.length > 0) ? `${total || employees.length} employee${(total || employees.length) > 1 ? 's' : ''} found` :
+           searchedOnce && employees.length === 0 ? 'No employees found' :
            'Search employees by name, client, or unit'}
         </p>
         </div>
@@ -382,37 +388,33 @@ export default function DirectoryPage({
       </div>
 
       {/* Pagination - under dropdowns, before list */}
-      {searchedOnce && total > 0 && (
+      {searchedOnce && employees.length > 0 && (
         <div className="flex items-center justify-between">
           <p className="text-xs text-muted-foreground">
-            Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+            {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
           </p>
           <div className="flex items-center gap-1.5">
-            {totalPages > 1 && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 px-2"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Button>
             <span className="text-sm font-medium">
-              Page {page} of {totalPages}
+              {page} / {totalPages}
             </span>
-            {totalPages > 1 && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 px-2"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
           </div>
         </div>
       )}
@@ -557,8 +559,8 @@ export default function DirectoryPage({
             ))}
           </div>
 
-          {/* Pagination at bottom of list too */}
-          {searchedOnce && total > PAGE_SIZE && (
+          {/* Pagination at bottom of list */}
+          {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2 pt-2">
               <Button
                 variant="outline"
